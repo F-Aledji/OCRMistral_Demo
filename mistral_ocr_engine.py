@@ -23,13 +23,14 @@ class MistralOCR:
                 "type": "document_url",
                 "document_url": f"data:application/pdf;base64,{base64_pdf}" 
             },
-            table_format="html", # default is "markdown"
+            table_format="markdown", # default is "markdown"
             extract_header=True, # default is False
             extract_footer=True, # default is False
             include_image_base64=True # falls gewünscht ist das Bilder extrahiert werden
         )
         return ocr_response
 
+    # funktion um Bild als base64 zu verarbeiten
     def mistral_ocr_image_base64(self, file_bytes):
         
         base64_image =self.encode_bytes_to_base64(file_bytes)  
@@ -40,8 +41,27 @@ class MistralOCR:
                 "type": "image_url",
                 "image_url": f"data:image/jpeg;base64,{base64_image}" 
             },
-            # table_format="markdown",
+            table_format="markdown", # default is "markdown"
             include_image_base64=True
             )
         return ocr_response
+
+    # Funktion um API Anfragen als Batch zu verarbeiten   
+    def batch_mistral_ocr_pdf_base64(self, file_bytes):
+        # Wir müssen self.client nutzen
+        # In einem Dictionary nutzt man Doppelpunkte : statt Gleichheitszeichen =
+        self.client.files.upload(
+            file={
+                "file_name": "test.jsonl", 
+                "content": open("test.jsonl", "rb")
+            },
+            purpose="batch"
+        )
         
+    # Funktion um den Inhalt des PDFs als Markdown zu extrahieren   
+    def get_markdown_content(self, ocr_response):
+        # Da ocr_response ein Objekt des SDKs ist, greifen wir per .pages darauf zu
+        markdown_text = ""
+        for page in ocr_response.pages:
+            markdown_text += page.markdown + "\n\n"
+        return markdown_text.strip()
