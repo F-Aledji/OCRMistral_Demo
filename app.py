@@ -1,33 +1,36 @@
 import streamlit as st
 import os
 from mistral_ocr_engine import MistralOCR
+import dotenv
 
-MISTRAL_API_KEY = "wfm9q1Wc8hUbA7CukYsD4wk3VdKwzBV1"
+dotenv.load_dotenv()    
+
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
 st.set_page_config(page_title="Mistral OCR Demo", layout="centered")
 st.title("OCR Demo")
 
 if "ocr_engine" not in st.session_state:
-     st.session_state.ocr_engine = MistralOCR(MISTRAL_API_KEY)
+    st.session_state.ocr_engine = MistralOCR(MISTRAL_API_KEY)
 
 uploaded_file = st.file_uploader("Upload a PDF or Image file", type=["pdf", "jpg", "jpeg", "png"])
 
-    
 if uploaded_file and st.button("OCR starten"):
     st.info("Verarbeite Datei mit Mistral AI OCR...")
 
     try: 
-         file_bytes = uploaded_file.getvalue()
-         
-         #unterscheiden zwischen PDF und Bild
+        file_bytes = uploaded_file.getvalue()
+        
+        # Unterscheiden zwischen PDF und Bild
         if uploaded_file.type == "application/pdf":
-            ocr_result = st.session_state.ocr_engine.mistral_ocr_pdf_base64(file_bytes) # funktionen aus der mistral_ocr_engine.py
+            ocr_result = st.session_state.ocr_engine.mistral_ocr_pdf_base64(file_bytes)
         else:
-            ocr_result = st.session_state.ocr_engine.mistral_ocr_image_base64(file_bytes) # funktionen aus der mistral_ocr_engine.py
+            ocr_result = st.session_state.ocr_engine.mistral_ocr_image_base64(file_bytes)
+        
         st.success("OCR abgeschlossen!")
     
         markdown_extracted = ""
-        for page in ocr_result:
+        for page in ocr_result.pages:
             markdown_extracted += page.markdown + "\n\n"
     
         col1, col2 = st.columns(2)
@@ -42,7 +45,3 @@ if uploaded_file and st.button("OCR starten"):
             
     except Exception as e:
         st.error(f"Fehler bei der OCR-Verarbeitung: {e}")
-
-
-    
-        
