@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SupplierConfirmationSchema",
+  "type": "object",
+  "properties": {
+    "SupplierConfirmation": {
+      "type": "object",
+      "properties": {
+        "supplierConfirmationData": {
+          "type": "object",
+          "properties": {
+            "salesConfirmation": {
+              "type": "string",
+              "description": "Fremdreferenznummer (Beleg-/Auftrags-/Lieferscheinnummer). FILTER: Ignoriere Strings, die mit 'BA', 'BE' oder '100-' beginnen. Fallback: 'Nicht gefunden'."
+            },
+            "date": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "Belegdatum (Seite 1 oben). Format ZWINGEND: dd#mm#yyyy. Keinesfalls das Lieferdatum!"
+                }
+              },
+              "required": ["value"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["salesConfirmation", "date"],
+          "additionalProperties": false
+        },
+        "invoiceSupplierData": {
+          "type": "object",
+          "properties": {
+            "SupplierPartner": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "string",
+                  "description": "EXTERN INJIZIERT: Hier muss der Wert rein, der im Prompt/Context als 'Lieferantennummer' übergeben wurde. Nicht vom PDF lesen. Fallback: 'Nicht gefunden'."
+                }
+              },
+              "required": ["number"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["SupplierPartner"],
+          "additionalProperties": false
+        },
+        "invoicingData": {
+          "type": "object",
+          "properties": {
+            "PaymentTerms": {
+              "type": "string",
+              "const": "",
+              "description": "Muss leer bleiben."
+            }
+          },
+          "required": ["PaymentTerms"],
+          "additionalProperties": false
+        },
+        "Correspondence": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "string",
+              "description": "Bestellnummer. Format: Beginnt mit 'BA' + 8 Ziffern. Präfixe (z.B. 100-) entfernen."
+            }
+          },
+          "required": ["number"],
+          "additionalProperties": false
+        },
+        "Type": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "3-stelliger Code vor der BA-Nummer. Fallback '100'. Ausnahme: '074' wird zu '100'."
+            }
+          },
+          "required": ["code"],
+          "additionalProperties": false
+        },
+        "Details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sequence": { "type": "string", "const": "0" },
+              "number": { 
+                "type": "string", 
+                "description": "Positionsnummer (Rohwert, z.B. '1', '2'). Python multipliziert dies später mit 10." 
+              },
+              "totalQuantity": {
+                "type": "object",
+                "properties": {
+                  "amount": { 
+                    "type": "string",
+                    "description": "Menge als Rohwert (z.B. '10,5'). Python prüft auf Dezimalstellen und setzt ggf. auf 0."
+                  },
+                  "Uom": {
+                    "type": "object",
+                    "properties": {
+                      "code": { "type": "string", "const": "Stk" }
+                    },
+                    "required": ["code"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["amount", "Uom"],
+                "additionalProperties": false
+              },
+              "deliveryDate": {
+                "type": "object",
+                "properties": {
+                  "specialValue": { "type": "string", "const": "NONE" },
+                  "date": { 
+                    "type": "string", 
+                    "description": "Lieferdatum der Position. Format: dd.mm.yyyy oder dd#mm#yyyy. Fallback: Header-Datum." 
+                  }
+                },
+                "required": ["specialValue", "date"],
+                "additionalProperties": false
+              },
+              "grossPrice": {
+                "type": "object",
+                "properties": {
+                  "amount": { "type": "string", "description": "Einzelpreis der Position." },
+                  "Currency": {
+                    "type": "object",
+                    "properties": {
+                      "isoCode": { "type": "string", "const": "EUR" }
+                    },
+                    "required": ["isoCode"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["amount", "Currency"],
+                "additionalProperties": false
+              },
+              "CorrespondenceDetail": {
+                "type": "object",
+                "properties": {
+                  "number": { 
+                    "type": "string",
+                    "description": "Soll identisch sein zur Positionsnummer."
+                  }
+                },
+                "required": ["number"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["sequence", "number", "totalQuantity", "deliveryDate", "grossPrice", "CorrespondenceDetail"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["supplierConfirmationData", "invoiceSupplierData", "invoicingData", "Correspondence", "Type", "Details"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["SupplierConfirmation"],
+  "additionalProperties": false
+}

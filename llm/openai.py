@@ -1,3 +1,15 @@
+from openai import AzureOpenAI, OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+#Initialize Azure OpenAI and OpenAI
+openai_api_key = os.getenv("OPENAI_API_KEY")
+azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+
+prompt = f"{instructions}\n\nErwartetes JSON-Schema:\n{schema}\n\nText:\n{ocr_text}"
+
 class AzureLLM:
     """Klasse um Azure OpenAI API zu nutzen"""
     
@@ -40,9 +52,9 @@ class AzureLLM:
 class OpenAILLM:
     """Klasse um OpenAI API zu nutzen"""
     
-    def __init__(self, api_key, model="gpt-4o"):
+    def __init__(self, model="gpt-5-mini"):
         self.model = model
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=openai_api_key)
     
     def extract_structured_response(self, ocr_text, instructions=None, schema=None):
         """
@@ -61,12 +73,12 @@ class OpenAILLM:
         
         system_prompt = f"{instructions}\n\nErwartetes JSON-Schema:\n{schema}"
         
-        response = self.client.chat.completions.create(
+        response = self.client.responses.create(
             model=self.model,
-            messages=[
+            reasoning={"effort": "high"},
+            input=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": ocr_text}
-            ],
-            response_format={"type": "json_object"}
+            ]
         )
         return response.choices[0].message.content
