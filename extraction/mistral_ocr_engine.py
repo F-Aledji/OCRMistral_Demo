@@ -46,22 +46,26 @@ class MistralOCR:
             )
         return ocr_response
 
-    # Funktion um API Anfragen als Batch zu verarbeiten   
-    def batch_mistral_ocr_pdf_base64(self, file_bytes):
-        # Wir müssen self.client nutzen
-        # In einem Dictionary nutzt man Doppelpunkte : statt Gleichheitszeichen =
-        self.client.files.upload(
-            file={
-                "file_name": "test.jsonl", 
-                "content": open("test.jsonl", "rb")
-            },
-            purpose="batch"
-        )
-        
-    # Funktion um den Inhalt des PDFs als Markdown zu extrahieren   
-    def get_markdown_content(self, ocr_response):
-        # Da ocr_response ein Objekt des SDKs ist, greifen wir per .pages darauf zu
-        markdown_text = ""
-        for page in ocr_response.pages:
-            markdown_text += page.markdown + "\n\n"
-        return markdown_text.strip()
+    # =========================================================================
+    # AUSKOMMENTIERT - Nicht in Verwendung
+    # =========================================================================
+    
+    # # Funktion um API Anfragen als Batch zu verarbeiten   
+    # def batch_mistral_ocr_pdf_base64(self, file_bytes):
+    #     # Wir müssen self.client nutzen
+    #     # In einem Dictionary nutzt man Doppelpunkte : statt Gleichheitszeichen =
+    #     self.client.files.upload(
+    #         file={
+    #             "file_name": "test.jsonl", 
+    #             "content": open("test.jsonl", "rb")
+    #         },
+    #         purpose="batch"
+    #     )
+    #     
+    # # Funktion um den Inhalt des PDFs als Markdown zu extrahieren   
+    # def get_markdown_content(self, ocr_response):
+    #     # Da ocr_response ein Objekt des SDKs ist, greifen wir per .pages darauf zu
+    #     markdown_text = ""
+    #     for page in ocr_response.pages:
+    #         markdown_text += page.markdown + "\n\n"
+    #     return markdown_text.strip()

@@ -1,3 +1,10 @@
+# =============================================================================
+# AUSKOMMENTIERT - Nicht in Verwendung
+# Diese Datei enthält unfertige Azure/OpenAI Klassen mit undefinierten Variablen
+# Die aktive LLM-Logik befindet sich in openai_test.py
+# =============================================================================
+
+"""
 from openai import AzureOpenAI, OpenAI
 from dotenv import load_dotenv
 
@@ -11,7 +18,7 @@ azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 prompt = f"{instructions}\n\nErwartetes JSON-Schema:\n{schema}\n\nText:\n{ocr_text}"
 
 class AzureLLM:
-    """Klasse um Azure OpenAI API zu nutzen"""
+    Klasse um Azure OpenAI API zu nutzen
     
     def __init__(self, api_key, endpoint, deployment_id, api_version):
         self.deployment_id = deployment_id
@@ -22,7 +29,7 @@ class AzureLLM:
         )
 
     def extract_structured_response(self, ocr_text, instructions=None, schema=None):
-        """
+        
         Extrahiert strukturierte Daten aus OCR-Text.
         
         Args:
@@ -32,7 +39,7 @@ class AzureLLM:
         
         Returns:
             str: JSON-Response vom LLM
-        """
+        
         instructions = instructions or SYSTEM_INSTRUCTIONS
         schema = schema or EXTRACTION_SCHEMA
         
@@ -50,14 +57,14 @@ class AzureLLM:
 
 
 class OpenAILLM:
-    """Klasse um OpenAI API zu nutzen"""
+    Klasse um OpenAI API zu nutzen
     
     def __init__(self, model="gpt-5-mini"):
         self.model = model
         self.client = OpenAI(api_key=openai_api_key)
     
     def extract_structured_response(self, ocr_text, instructions=None, schema=None):
-        """
+        
         Extrahiert strukturierte Daten aus OCR-Text.
         
         Args:
@@ -67,7 +74,7 @@ class OpenAILLM:
         
         Returns:
             str: JSON-Response vom LLM
-        """
+        
         instructions = instructions or SYSTEM_INSTRUCTIONS
         schema = schema or EXTRACTION_SCHEMA
         
@@ -82,3 +89,4 @@ class OpenAILLM:
             ]
         )
         return response.choices[0].message.content
+"""
