@@ -44,17 +44,20 @@ if uploaded_file and st.button("OCR starten"):
             json_data = {}
             xml_output = ""
     
-        col1, col2, col3 = st.columns(3)
+        # Markdown separat anzeigen
+        st.subheader("Extrahierter Text")
+        st.markdown(markdown_extracted)
+        
+        st.divider()
+        
+        # JSON und XML in 2 Spalten
+        col1, col2 = st.columns(2)
 
         with col1:
-            st.subheader("Extrahierter Text")
-            st.markdown(markdown_extracted)
-
-        with col2:
             st.subheader("JSON")
             st.json(json_data)
         
-        with col3:
+        with col2:
             st.subheader("XML")
             st.code(xml_output, language='xml')
             

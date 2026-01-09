@@ -23,10 +23,10 @@ class MistralOCR:
                 "type": "document_url",
                 "document_url": f"data:application/pdf;base64,{base64_pdf}" 
             },
-            table_format="markdown", # default is "markdown"
-            extract_header=True, # default is False
-            extract_footer=True, # default is False
-            include_image_base64=True # falls gewünscht ist das Bilder extrahiert werden
+            # table_format weggelassen = Tabellen werden inline im Text angezeigt
+            extract_header=True,
+            extract_footer=True,
+            include_image_base64=True
         )
         return ocr_response
 
@@ -41,7 +41,7 @@ class MistralOCR:
                 "type": "image_url",
                 "image_url": f"data:image/jpeg;base64,{base64_image}" 
             },
-            table_format="markdown", # default is "markdown"
+            # table_format weggelassen = Tabellen werden inline im Text angezeigt
             include_image_base64=True
             )
         return ocr_response
