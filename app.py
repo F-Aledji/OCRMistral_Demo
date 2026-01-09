@@ -47,15 +47,15 @@ if uploaded_file and st.button("OCR starten"):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.subheader("Extrahierter Text (Markdown)")
+            st.subheader("Extrahierter Text")
             st.markdown(markdown_extracted)
 
         with col2:
-            st.subheader("LLM JSON")
+            st.subheader("JSON")
             st.json(json_data)
         
         with col3:
-            st.subheader("Generiertes XML")
+            st.subheader("XML")
             st.code(xml_output, language='xml')
             
     except Exception as e:

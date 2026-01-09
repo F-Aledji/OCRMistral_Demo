@@ -38,7 +38,7 @@ def get_json_extraction(markdown_text, extraction_schema):
         text={
             "format": {
                 "type": "json_schema",
-                "name": "markdown_extraction",
+                 "name": "markdown_extraction",
                 "schema": extraction_schema,
             }
         }
