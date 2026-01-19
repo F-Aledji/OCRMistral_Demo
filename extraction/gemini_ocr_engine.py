@@ -11,7 +11,9 @@ if GOOGLE_APPLICATION_CREDENTIALS:
 
 PROJECT_ID = "ocr-pipeline-weinmannschanz" # Ihre Google Cloud Projekt-ID
 LOCATION = "global" # Die Region
-prompt=""
+SYSTEM_PROMPT=""
+USER_PROMPT=""
+
 
 #--- OCR Engine Klasse für Gemini über Google Cloud ---
 class GeminiOCR:
@@ -46,7 +48,7 @@ class GeminiOCR:
                 types.Content(
                     role="user",
                     parts=[
-                        types.Part(text=prompt),
+                        types.Part(text=USER_PROMPT),
                         types.Part(
                             inline_data=types.Blob(
                                 mime_type="application/pdf",
@@ -55,7 +57,12 @@ class GeminiOCR:
                         )
                     ]
                 )
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT
+                ,thinking_config=types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.LOW)
+                )
         )
        
         return response
@@ -68,7 +75,7 @@ class GeminiOCR:
                 types.Content(
                     role="user",
                     parts=[
-                        types.Part(text=prompt),
+                        types.Part(text=USER_PROMPT),
                         types.Part(
                             inline_data=types.Blob(
                                 mime_type="image/jpeg",
@@ -77,7 +84,12 @@ class GeminiOCR:
                         )
                     ]
                 )
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT
+                ,thinking_config=types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.LOW)
+                )
         )
        
         return response
