@@ -49,8 +49,8 @@ Strukturvorgabe:
 ## Kopfdaten
 - **Belegnummer:** Vom Lieferanten vergebene Auftragsbestätigungsnummer
 - **Datum:** [dd.mm.yyyy]
-- **Lieferant:** [Name, Ort]
-- **Kunde:** [Name, Ort]
+- **Lieferant:** Vollständige Adresse des Lieferanten
+- **Kunde:** Vollständige Adresse von Weinmann & Schanz
 - **Referenz:** [BA-Nummer(n)]
 
 ## Positionen
