@@ -11,14 +11,14 @@
           "properties": {
             "salesConfirmation": {
               "type": "string",
-              "description": "Fremdreferenznummer (Beleg-/Auftrags-/Lieferscheinnummer). FILTER: Ignoriere Strings, die mit 'BA', 'BE' oder '100-' beginnen. Fallback: 'Nicht gefunden'."
+              "description": "Fremdreferenznummer, also die Beleg-/Auftrags-/Lieferscheinnummer. FILTER: Ignoriere Strings, die mit 'BA', 'BE' oder '100-' beginnen. Das sind die Präfixe für unsere Nummern. Fallback: 'Nicht gefunden'."
             },
             "date": {
               "type": "object",
               "properties": {
                 "value": {
                   "type": "string",
-                  "description": "Belegdatum (Seite 1 oben). Format ZWINGEND: dd#mm#yyyy. Keinesfalls das Lieferdatum!"
+                  "description": "Belegdatum (in der Regel Seite 1 oben). Format ZWINGEND: dd#mm#yyyy. Keinesfalls das Lieferdatum!"
                 }
               },
               "required": ["value"],
