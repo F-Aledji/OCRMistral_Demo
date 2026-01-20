@@ -54,9 +54,9 @@ Strukturvorgabe:
 - **Referenz:** [BA-Nummer(n)]
 
 ## Positionen
-| Pos | Art-Nr. | Beschreibung | Menge | Einheit | Liefertermin | Einzelpreis | Gesamtpreis |
-|---|---|---|---|---|---|---|---|
-| 1 | ... | ... | ... | ... | ... | ... | ... |
+| Pos | Art-Nr. | Beschreibung | Menge | Einheit | Liefertermin | Einzelpreis | Rabatt % | Rabattbetrag | Gesamtpreis | 
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
 
 ## Beträge
 - **Nettbetrag:**
