@@ -1,20 +1,21 @@
 import os
 import json
-import base64
 from mistralai import Mistral
+from extraction.base_ocr import BaseOCR
 
 
 #--- OCR Engine Klasse für Mistral OCR ---
-class MistralOCR:
+class MistralOCR(BaseOCR):
     def __init__(self, MISTRAL_API_KEY):
+        super().__init__()
         self.client = Mistral(api_key=MISTRAL_API_KEY)
 
-    # File in Base64 kodieren
-    def encode_bytes_to_base64(self,file_bytes):
-        return base64.b64encode(file_bytes).decode('utf-8')
-    
     # funktion um PDF als base64 zu verarbeiten
-    def mistral_ocr_pdf_base64(self, file_bytes):
+    def process_pdf(self, file_bytes, stream=False):
+        """
+        Impl für Mistral PDF OCR.
+        Stream Parameter wird aktuell ignoriert/nicht unterstützt von Mistral OCR API Wrapper in dieser Form.
+        """
         base64_pdf =self.encode_bytes_to_base64(file_bytes)
 
         ocr_response = self.client.ocr.process(
@@ -31,7 +32,8 @@ class MistralOCR:
         return ocr_response
 
     # funktion um Bild als base64 zu verarbeiten
-    def mistral_ocr_image_base64(self, file_bytes):
+    def process_image(self, file_bytes, stream=False):
+        """Impl für Mistral Image OCR."""
         
         base64_image =self.encode_bytes_to_base64(file_bytes)  
 
@@ -45,6 +47,13 @@ class MistralOCR:
             include_image_base64=True
             )
         return ocr_response
+
+    # Legacy Aliases (für Abwärtskompatibilität, falls nötig)
+    def mistral_ocr_pdf_base64(self, file_bytes):
+        return self.process_pdf(file_bytes)
+    
+    def mistral_ocr_image_base64(self, file_bytes):
+        return self.process_image(file_bytes)
 
     # =========================================================================
     # AUSKOMMENTIERT - Nicht in Verwendung
