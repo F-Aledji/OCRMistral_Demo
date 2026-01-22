@@ -1,6 +1,6 @@
 .venv
 .env
-ocr-pipeline-weinmannschanz-aea19ee16cb7.json
+ocr-pipeline-weinmannschanz*.json
 _quarantine
 logs
 doc
