@@ -116,7 +116,7 @@ class GeminiOCR(BaseOCR):
         # Config Setup
         config_args = {
             "system_instruction": SYSTEM_PROMPT,
-            "thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
+            "thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)
         }
 
         # Wenn json_schema übergeben wird, Structured Output erzwingen
