@@ -3,7 +3,6 @@
 ocr-pipeline-weinmannschanz*.json
 _quarantine
 logs
-doc
 schema.json
 template.xml
 template.xml.j2
