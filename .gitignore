@@ -1,8 +1,17 @@
 .venv
 .env
+supplier_schema_generated*
 ocr-pipeline-weinmannschanz*.json
 _quarantine
 logs
 schema.json
 template.xml
 template.xml.j2
+__pycache__/
+*.py[cod]
+*$py.class
+01_Input_Hotfolder/
+02_Output_XML/
+03_Process_Trace/
+98_Error_Quarantine/
+99_Archive_Processed/
