@@ -15,3 +15,5 @@ __pycache__/
 03_Process_Trace/
 98_Error_Quarantine/
 99_Archive_Success/
+tests/
+.pytests_cache/

@@ -2,10 +2,13 @@
 
 import json
 import os
-import validation
+import logging
 from validation.input_gate import InputGate
 from validation.post_processing import enforce_business_rules, generate_xml_from_data
 from jinja2 import Environment, FileSystemLoader
+import config.config as cfg
+
+logger = logging.getLogger(__name__)
 
 class PipelineController:
     
@@ -16,11 +19,11 @@ class PipelineController:
         self.ocr_engine = ocr_engine
         self.llm_engine = llm_engine
         
-        #InputGate initialisieren (für Validierung)
-        self.input_gate = InputGate(quarantine_dir="_quarantine")
+        # InputGate initialisieren - nutzt ERROR Ordner für Quarantäne
+        self.input_gate = InputGate(quarantine_dir=cfg.FOLDERS["ERROR"])
 
         ## Template Umgebung für XML laden
-        self.env = Environment(loader=FileSystemLoader(os.path.join(project_root, "project_root")))
+        self.env = Environment(loader=FileSystemLoader(project_root))
 
     # Validierung der Datei:
     def _validate_file(self, file_bytes, filename, model_name):
@@ -88,6 +91,13 @@ class PipelineController:
                 # 3. OCR Ausführen
                 extracted_text, used_schema = self._run_ocr(processed_bytes, filename, pipeline_mode)
 
+                if not extracted_text or not extracted_text.strip():
+                     return {
+                        "success": False, 
+                        "error": "OCR Warning: Extrahierter Text ist leer.", 
+                        "filename": filename
+                    }
+
                 # 4. Daten Extraktion (LLM oder Parse)
                 json_data = {}
                 
@@ -101,11 +111,23 @@ class PipelineController:
                     # Schau in deine base_llm.py: extract_and_generate_xml macht alles.
                     # Nutzen wir das der Einfachheit halber:
                     json_data, xml_output = self.llm_engine.extract_and_generate_xml(extracted_text)
+                    
+                    if not json_data:
+                        # Hier greift auch der Fall json_data == {}
+                        error_detail = xml_output if xml_output else "LLM lieferte leeres JSON Objekt"
+                        return {
+                            "success": False,
+                            "error": f"Extraction Error: {error_detail}",
+                            "filename": filename,
+                            "markdown": extracted_text # Markdown zurückgeben für Debugging
+                        }
+
                     return {
                         "success": True, 
                         "json": json_data, 
                         "xml": xml_output, 
-                        "filename": filename
+                        "filename": filename,
+                        "markdown": extracted_text # Markdown ist auch im Success Fall sinnvoll
                     }
                 
                 # Falls Direct JSON Mode (hier müssen wir Rules + XML manuell machen)

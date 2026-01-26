@@ -1,25 +1,28 @@
 import os
 import json
+import logging
 from typing import Any, Dict
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from llm.base_llm import BaseLLM
+import config.config as cfg
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
+SYSTEM_INSTRUCTIONS = """Du bist ein Markdown zu JSON parser. Du erhältst Markdown-Text und eine JSON-Schema Definition. Deine Aufgabe ist es, die relevanten Daten aus dem Markdown basierend des Schemas zu extrahieren und sie in einem validen JSON-Format zurückzugeben.
+"""
 
 class GeminiLLM(BaseLLM):
     def __init__(self, project_root: str):
         super().__init__(project_root)
-        self.project_id = os.getenv("GEMINI_PROJECT_ID")
-        self.location = os.getenv("GEMINI_LOCATION", "global")
-        self.model_name = "gemini-3-pro-preview"
+        self.project_id = cfg.GEMINI_PROJECT_ID
+        self.location = cfg.GEMINI_LOCATION
+        self.model_name = cfg.GEMINI_LLM_MODEL
         
-        service_account_path = os.getenv("GEMINI_SERVICE_ACCOUNT_PATH")
         if self.project_id:
              os.environ["PROJECT_ID"] = self.project_id
-        if service_account_path:
-             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = service_account_path
+        if cfg.GEMINI_CREDENTIALS:
+             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cfg.GEMINI_CREDENTIALS
 
         try:
              self.client = genai.Client(
@@ -27,14 +30,15 @@ class GeminiLLM(BaseLLM):
                 project=self.project_id, 
                 location=self.location
             )
+             logger.info(f"Gemini LLM Client erfolgreich konfiguriert für Projekt '{self.project_id}'.")
         except Exception as e:
-             print(f"Gemini Client Init Error: {e}")
-             self.client = None
+             logger.error(f"Gemini Client Init Error: {e}")
+             raise RuntimeError(f"Gemini LLM Client konnte nicht initialisiert werden: {e}")
 
     def get_json_extraction(self, markdown_text: str, extraction_schema: Dict[str, Any]) -> Dict[str, Any]:
         """Ruft Gemini API auf um strukturierte JSON-Daten aus Markdown zu extrahieren."""
         if not self.client:
-            print("Gemini Client not initialized.")
+            logger.warning("Gemini Client not initialized.")
             return {}
 
         prompt = f"""
@@ -59,7 +63,8 @@ class GeminiLLM(BaseLLM):
                     response_mime_type="application/json",
                     response_schema=qs,
                     thinking_config=types.ThinkingConfig(
-                        thinking_level=types.ThinkingLevel.LOW)
+                        thinking_level=types.ThinkingLevel.LOW),
+                    system_instruction=SYSTEM_INSTRUCTIONS
                 )
             )
             

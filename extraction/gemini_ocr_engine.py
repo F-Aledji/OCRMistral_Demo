@@ -1,12 +1,15 @@
 import base64
 import os
 import json
+import logging
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 from extraction.base_ocr import BaseOCR
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 if GOOGLE_APPLICATION_CREDENTIALS:
@@ -99,10 +102,10 @@ class GeminiOCR(BaseOCR):
                 project=project_id, 
                 location=location
             )
-            print(f"Google Gen AI Client (v1) erfolgreich konfiguriert für Projekt '{project_id}'.")
+            logger.info(f"Google Gen AI Client (v1) erfolgreich konfiguriert für Projekt '{project_id}'.")
         except Exception as e:
-            print(f"Fehler bei der Konfiguration: {e}")
-            exit()
+            logger.error(f"Fehler bei der Konfiguration: {e}")
+            raise RuntimeError(f"Google Gen AI Client konnte nicht initialisiert werden: {e}")
 
     def process_pdf(self, file_bytes, stream=False, json_schema=None):
         return self._process_content(file_bytes, "application/pdf", stream, json_schema)

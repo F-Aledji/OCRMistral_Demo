@@ -1,17 +1,19 @@
-import os
 import json
+import logging
 from openai import OpenAI
-from dotenv import load_dotenv
 from llm.base_llm import BaseLLM
+import config.config as cfg
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
+SYSTEM_INSTRUCTIONS = """Du bist ein Markdown zu JSON parser. Du erhältst Markdown-Text und eine JSON-Schema Definition. Deine Aufgabe ist es, die relevanten Daten aus dem Markdown basierend des Schemas zu extrahieren und sie in einem validen JSON-Format zurückzugeben.
+"""
 class OpenAILLM(BaseLLM):
     def __init__(self, project_root):
         super().__init__(project_root)
         self.client = OpenAI()
-        self.model = "gpt-5.1" # Wie im Original
-        self.system_instructions = ""
+        self.model = cfg.OPENAI_MODEL
+        self.system_instructions = SYSTEM_INSTRUCTIONS
 
     def get_json_extraction(self, markdown_text, extraction_schema):
         """Ruft OpenAI API auf um strukturierte JSON-Daten aus Markdown zu extrahieren."""
@@ -32,10 +34,10 @@ class OpenAILLM(BaseLLM):
             
             content = response.output_text
             if not content:
-                print("OpenAI Warning: Empty content received")
+                logger.warning("OpenAI: Empty content received")
                 return {}
                 
             return json.loads(content)
         except Exception as e:
-            print(f"OpenAI Error: {e}")
+            logger.error(f"OpenAI Error: {e}")
             return {}

@@ -1,278 +1,182 @@
 import streamlit as st
 import os
-import inspect
+import time
+import shutil
 import json
-from extraction.mistral_ocr_engine import MistralOCR
-from extraction.gemini_ocr_engine import GeminiOCR
-from validation.input_gate import InputGate
-from validation.post_processing import enforce_business_rules, generate_xml_from_data
-from jinja2 import Environment, FileSystemLoader
-import dotenv
+from datetime import datetime
+import config.config as cfg
 
-# LLM Engines
-from llm.openai_llm import OpenAILLM
-from llm.gemini_llm import GeminiLLM
+st.set_page_config(page_title="Batch Dashboard", layout="wide", page_icon="📊")
 
-# API Keys und Konfiguration
-dotenv.load_dotenv(override=True)
+# --- Header ---
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.title("📊 Batch Runner Dashboard")
+    st.caption(f"Überwachung für Projekt: `{cfg.PROJECT_ROOT}`")
+with col2:
+    if st.button("🔄 Refresh", use_container_width=True):
+        st.rerun()
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# --- Helper Functions ---
+def count_files(directory):
+    if not os.path.exists(directory): return 0
+    return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) and not f.startswith('.')])
 
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-GEMINI_SERVICE_ACCOUNT_PATH = os.getenv("GEMINI_SERVICE_ACCOUNT_PATH", "")
-GEMINI_PROJECT_ID = os.getenv("GEMINI_PROJECT_ID", "")
-GEMINI_LOCATION = os.getenv("GEMINI_LOCATION", "global")
+def get_daily_stats(folder):
+    """Zählt Dateien, die heute modifiziert wurden."""
+    if not os.path.exists(folder): return 0
+    count = 0
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    for f in os.listdir(folder):
+        fp = os.path.join(folder, f)
+        if os.path.isfile(fp):
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(fp))
+                if mtime >= today_start:
+                    count += 1
+            except:
+                pass
+    return count
 
-st.set_page_config(page_title="OCR Demo", layout="wide")
-st.title("OCR Demo")
+def get_recent_logs(lines=20):
+    if not os.path.exists(cfg.LOG_FILE):
+        return ["⚠️ Kein Log-File gefunden."]
+    try:
+        with open(cfg.LOG_FILE, "r", encoding="utf-8") as f:
+            all_lines = f.readlines()
+            return all_lines[-lines:]
+    except Exception as e:
+        return [f"Fehler beim Lesen der Logs: {e}"]
 
-# =============================================================================
-# Input Gate initialisieren (Validierung vor OCR)
-# =============================================================================
-@st.cache_resource
-def get_input_gate():
-    return InputGate(quarantine_dir="_quarantine")
+# --- Metrics Section ---
+st.subheader("Status Übersicht")
+m1, m2, m3, m4 = st.columns(4)
 
-input_gate = get_input_gate()
+input_count = count_files(cfg.FOLDERS["INPUT"])
+archive_today = get_daily_stats(cfg.FOLDERS["ARCHIVE"])
+error_count = count_files(cfg.FOLDERS["ERROR"])
+output_count = count_files(cfg.FOLDERS["OUTPUT"])
 
-# OCR Modell Auswahl in der Sidebar
-st.sidebar.header("Einstellungen")
-ocr_model = st.sidebar.selectbox(
-    "OCR Modell auswählen",
-    ["Mistral OCR", "Gemini OCR"],
-    index=0,
-    help="Wähle das Modell für die OCR-Verarbeitung"
-)
+m1.metric("📥 Warteschlange (Input)", input_count, help="Dateien in 01_Input_PDF")
+m2.metric("✅ Archiviert (Heute)", archive_today, help="Dateien in 99_Archive_Success (Heute bearbeitet)")
+m3.metric("❌ Fehler (Quarantäne)", error_count, delta_color="inverse", help="Dateien in 98_Error_Quarantine")
+m4.metric("📤 Output XML Total", output_count, help="Dateien in 02_Output_XML")
 
-# Pipeline Modus
-pipeline_mode = st.sidebar.radio(
-    "Pipeline Modus",
-    ["Classic (OCR -> Markdown -> LLM)", "Direct JSON (Gemini OCR only)"],
-    index=0
-)
+# --- Quick Actions ---
+st.subheader("Schnellzugriff")
+ac1, ac2, ac3 = st.columns(3)
 
-if pipeline_mode == "Classic (OCR -> Markdown -> LLM)":
-    llm_choice = st.sidebar.selectbox(
-        "LLM Modell auswählen",
-        ["OpenAI GPT", "Gemini 3 Pro"],
-        index=0,
-        help="Wähle das Modell für die Daten-Extraktion (JSON/XML)"
-    )
-
-    # LLM Engine Factory
-    def get_llm_engine(choice):
-        if choice == "OpenAI GPT":
-            return OpenAILLM(PROJECT_ROOT)
-        elif choice == "Gemini 3 Pro":
-            return GeminiLLM(PROJECT_ROOT)
-        return None
-
-    llm_engine = get_llm_engine(llm_choice)
-else:
-    llm_engine = None
-
-# OCR Engine basierend auf Auswahl initialisieren
-def get_ocr_engine(model_name):
-    if model_name == "Mistral OCR":
-        return MistralOCR(MISTRAL_API_KEY)
-    elif model_name == "Gemini OCR":
-        if not GEMINI_PROJECT_ID:
-            st.sidebar.error("Gemini erfordert GEMINI_PROJECT_ID in .env")
-            return None
-        return GeminiOCR(GEMINI_SERVICE_ACCOUNT_PATH, GEMINI_PROJECT_ID, GEMINI_LOCATION)
-    return None
-
-# Engine bei Modellwechsel neu initialisieren
-if "ocr_model" not in st.session_state or st.session_state.ocr_model != ocr_model:
-    st.session_state.ocr_model = ocr_model
-    st.session_state.ocr_engine = get_ocr_engine(ocr_model)
-
-uploaded_file = st.file_uploader("Datei hochladen", type=["pdf", "jpg", "jpeg", "png"])
-
-if uploaded_file and st.button("OCR starten"):
-    if st.session_state.ocr_engine is None:
-        st.error("OCR Engine konnte nicht initialisiert werden. Bitte Konfiguration prüfen.")
+with ac1:
+    if error_count > 0:
+        if st.button(f"🚨 Alle ({error_count}) Fehler wiederholen", type="primary", use_container_width=True):
+            count = 0
+            for f in os.listdir(cfg.FOLDERS["ERROR"]):
+                src = os.path.join(cfg.FOLDERS["ERROR"], f)
+                dst = os.path.join(cfg.FOLDERS["INPUT"], f)
+                try:
+                    shutil.move(src, dst)
+                    count += 1
+                except Exception as e:
+                    st.error(f"Fehler bei {f}: {e}")
+            if count > 0:
+                st.success(f"{count} Dateien zurück in Input verschoben!")
+                time.sleep(1.5)
+                st.rerun()
     else:
-        file_bytes = uploaded_file.getvalue()
-        
-        # =================================================================
-        # INPUT GATE - Validierung VOR API-Aufruf
-        # =================================================================
-        with st.spinner("🔍 Validiere Datei..."):
-            validation = input_gate.validate(
-                file_bytes=file_bytes,
-                filename=uploaded_file.name,
-                target_model=st.session_state.ocr_model  # Direkt String übergeben
-            )
-        
-        # Validierungs-Ergebnis prüfen
-        if not validation.is_valid:
-            st.error(f"❌ Datei abgelehnt: {validation.error_message}")
-            st.stop()
-        
-        # Warnungen anzeigen
-        if validation.warnings:
-            for warning in validation.warnings:
-                st.warning(f"⚠️ {warning}")
-        
-        # Info über bereinigte Datei
-        if validation.removed_pages:
-            st.info(f"🧹 {len(validation.removed_pages)} leere Seiten entfernt (Seiten: {validation.removed_pages})")
-        
-        # PDF-Typ Info anzeigen
-        if validation.pdf_type != "unknown":
-            type_labels = {
-                "digital_born": "📄 Dokument wurde digital erstellt",
-                "scanned": "📷 Gescanntes Dokument",
-                "mixed": "📄📷 Gemischt (Text + Scan)",
-            }
-            st.caption(type_labels.get(validation.pdf_type, ""))
-        
-            # =================================================================
-            # OCR Verarbeitung
-            # =================================================================
-            st.info(f"Verarbeite Datei mit {st.session_state.ocr_model}...")
+        st.button("✅ Keine Fehler zum Wiederholen", disabled=True, use_container_width=True)
+
+with ac2:
+    if st.button("🗑️ Logs leeren", use_container_width=True):
+        try:
+            with open(cfg.LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+            st.success("Log-Datei wurde geleert.")
+            time.sleep(1)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Konnte Logs nicht leeren: {e}")
+
+# --- Live Log View ---
+st.divider()
+st.subheader("📜 Live Logs")
+
+@st.fragment(run_every=2)
+def show_live_logs():
+    """Zeigt die Logs an und aktualisiert sich alle 2 Sekunden selbständig."""
+    log_container = st.container(height=300)
+    # Button zum manuellen Stoppen/Starten könnte hier hin, aber wir lassen es einfach laufen
+    logs = get_recent_logs(30)
+    log_text = "".join(logs)
+    log_container.code(log_text, language="text")
+    st.caption(f"Letztes Update: {time.strftime('%H:%M:%S')}")
+
+show_live_logs()
+
+# --- Tabs für Details ---
+st.divider()
+tab1, tab2, tab3 = st.tabs(["📝 Letzte Ergebnisse (Trace)", "📂 Output XML", "⚠️ Quarantäne Details"])
+
+with tab1:
+    st.caption("Zeigt die letzten 5 Verarbeitungschritte aus `03_Process_Trace`")
+    if os.path.exists(cfg.FOLDERS["TRACE"]):
+        # Ordner holen, nach Zeit sortieren
+        try:
+            folders = [os.path.join(cfg.FOLDERS["TRACE"], f) for f in os.listdir(cfg.FOLDERS["TRACE"]) if os.path.isdir(os.path.join(cfg.FOLDERS["TRACE"], f))]
+            folders = sorted(folders, key=os.path.getmtime, reverse=True)[:5]
             
-            # Verwende die bereinigte Datei (ohne leere Seiten)
-            processed_bytes = validation.processed_bytes or file_bytes
-
-            # Direct JSON Schema Load
-            ocr_json_schema = None
-            if pipeline_mode == "Direct JSON (Gemini OCR only)":
-                if st.session_state.ocr_model != "Gemini OCR":
-                    st.error("Direct JSON Mode wird nur von Gemini OCR unterstützt.")
-                    st.stop()
-                
-                # Load Schema
-                schema_path = os.path.join(PROJECT_ROOT, 'schema', 'schema.json')
-                with open(schema_path, 'r', encoding='utf-8') as f:
-                    ocr_json_schema = json.load(f)
-
-            try: 
-                # Unterscheiden zwischen PDF und Bild je nach Engine
-                if st.session_state.ocr_model == "Mistral OCR":
-                    if uploaded_file.type == "application/pdf":
-                        # Mistral unterstützt aktuell kein Direct JSON - hier würde man eine Exception werfen oder fallbacken
-                        ocr_result = st.session_state.ocr_engine.process_pdf(processed_bytes)
-                    else:
-                        ocr_result = st.session_state.ocr_engine.process_image(processed_bytes)
+            if folders:
+                for fp in folders:
+                    fn = os.path.basename(fp)
+                    date_str = datetime.fromtimestamp(os.path.getmtime(fp)).strftime('%H:%M:%S')
                     
-                    # Mistral gibt ein Objekt mit .pages zurück
-                    markdown_extracted = ""
-                    for page in ocr_result.pages:
-                        markdown_extracted += page.markdown + "\n\n"
+                    with st.expander(f"🕒 {date_str} - {fn}"):
+                        # JSON laden wenn vorhanden
+                        json_path = os.path.join(fp, "2_extracted_data.json")
+                        log_path = os.path.join(fp, "process_log.txt")
                         
-                elif st.session_state.ocr_model == "Gemini OCR":
-                    # Check for Code Updates (Live-Reload Fix)
-                    sig = inspect.signature(st.session_state.ocr_engine.gemini_ocr_pdf_base64)
-                    if 'stream' not in sig.parameters:
-                        st.warning("OCR Engine aktualisiert (neue Version erkannt). Lade neu...")
-                        st.session_state.ocr_engine = get_ocr_engine(ocr_model)
-
-                    markdown_extracted = ""
-                    
-                    # Determine streaming: Only valid for standard Markdown mode
-                    do_stream = (pipeline_mode == "Classic (OCR -> Markdown -> LLM)")
-                    
-                    if do_stream:
-                        st.write("### Live Output:")
-                        output_place = st.empty()
-
-                    if uploaded_file.type == "application/pdf":
-                        response = st.session_state.ocr_engine.process_pdf(processed_bytes, stream=do_stream, json_schema=ocr_json_schema)
-                    else:
-                        response = st.session_state.ocr_engine.process_image(processed_bytes, stream=do_stream, json_schema=ocr_json_schema)
-                    
-                    # Output Handling
-                    if do_stream:
-                        for chunk in response:
-                            try:
-                                if chunk.text:
-                                    markdown_extracted += chunk.text
-                                    output_place.markdown(markdown_extracted + "▌") 
-                            except Exception:
-                                pass
-                        output_place.markdown(markdown_extracted)
-                        st.caption("Stream beendet.")
-                    else:
-                        # Direct JSON or Non-Streaming
-                        if ocr_json_schema:
-                            # Parse JSON directly from response text
-                            if response.text:
-                                markdown_extracted = response.text # Raw JSON string
-                                json_data = json.loads(response.text)
+                        c_log, c_json = st.columns([1, 2])
+                        
+                        with c_log:
+                            st.write("**Prozess Log:**")
+                            if os.path.exists(log_path):
+                                with open(log_path, 'r', encoding='utf-8') as f:
+                                    st.text(f.read())
                             else:
-                                st.error("Leere Antwort von Gemini OCR (Direct JSON).")
-                                json_data = {}
-                        else:
-                            markdown_extracted = response.text
+                                st.caption("Kein Log.")
 
-                st.success("OCR abgeschlossen!")
-                
-                # =================================================================
-                # Post-Processing & LLM (if needed)
-                # =================================================================
-                json_data_final = {}
-                xml_output_final = ""
+                        with c_json:
+                            st.write("**Extrahierte Daten:**")
+                            if os.path.exists(json_path):
+                                with open(json_path, 'r', encoding='utf-8') as f:
+                                    st.json(json.load(f))
+                            else:
+                                st.caption("JSON Datei fehlt.")
+            else:
+                st.info("Keine Trace-Ordner gefunden.")
+        except Exception as e:
+            st.error(f"Fehler beim Laden der Traces: {e}")
 
-                if pipeline_mode == "Direct JSON (Gemini OCR only)":
-                     # Wir haben bereits JSON (hoffentlich) in json_data
-                     # Führe nun Rules + XML Gen aus
-                     try:
-                        if 'json_data' in locals() and json_data:
-                            json_data_final = enforce_business_rules(json_data)
-                            
-                            # Environment für Template laden
-                            env = Environment(loader=FileSystemLoader(PROJECT_ROOT))
-                            xml_output_final = generate_xml_from_data(json_data_final, env)
-                            
-                            st.success("Direct JSON & XML Generierung erfolgreich!")
-                        else:
-                            st.error("JSON Konvertierung fehlgeschlagen.")
-                     except Exception as e:
-                         st.error(f"Fehler bei JSON/XML Verarbeitung: {e}")
+with tab2:
+    st.caption("Die 5 neuesten XML-Dateien")
+    if os.path.exists(cfg.FOLDERS["OUTPUT"]):
+        files = [os.path.join(cfg.FOLDERS["OUTPUT"], f) for f in os.listdir(cfg.FOLDERS["OUTPUT"]) if f.endswith(".xml")]
+        files = sorted(files, key=os.path.getmtime, reverse=True)[:5]
+        
+        if files:
+            for fp in files:
+                fn = os.path.basename(fp)
+                st.text(f"📄 {fn}")
+        else:
+            st.info("Kein XML Output vorhanden.")
 
-                else:
-                    # Classic Mode: LLM Call
-                    st.info("Starte LLM Extraktion...")
-                    try:
-                        if llm_engine:
-                            json_data_final, xml_output_final = llm_engine.extract_and_generate_xml(markdown_extracted)
-                            st.success(f"LLM Verarbeitung erfolgreich ({llm_choice})!")
-                        else:
-                            st.error("LLM Engine nicht initialisiert.")
-                    except Exception as e:
-                        st.error(f"Fehler bei der LLM-Verarbeitung: {e}")
-            
-                # Markdown nur anzeigen im Classic Mode
-                if pipeline_mode == "Classic (OCR -> Markdown -> LLM)":
-                    # Markdown separat anzeigen (nur für Mistral oder Gemini Standard)
-                    if st.session_state.ocr_model != "Gemini OCR" or not do_stream:
-                         # Falls es nicht gestreamed wurde (z.B. Mistral), hier anzeigen
-                         # Bei Gemini wurde es oben schon gestreamed.
-                         pass
-                    
-                    # Bei Mistral müssen wir es noch anzeigen, da wir oben nur gemerkt haben
-                    if st.session_state.ocr_model == "Mistral OCR":
-                         st.divider()
-                         st.subheader("Extrahierter Text")
-                         st.divider()
-                         st.markdown(markdown_extracted)
-
-                st.divider()
-                
-                # JSON und XML in 2 Spalten
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.subheader("JSON")
-                    st.json(json_data_final)
-                
-                with col2:
-                    st.subheader("XML")
-                    st.code(xml_output_final, language='xml')
-                    
-            except Exception as e:
-                st.error(f"Fehler bei der OCR-Verarbeitung: {e}")
-                import traceback
-                st.code(traceback.format_exc())
+with tab3:
+    st.caption("Dateien im Fehler-Ordner")
+    if os.path.exists(cfg.FOLDERS["ERROR"]):
+        files = [f for f in os.listdir(cfg.FOLDERS["ERROR"]) if os.path.isfile(os.path.join(cfg.FOLDERS["ERROR"], f))]
+        if files:
+            for f in files:
+                st.warning(f"⚠️ {f}")
+        else:
+            st.success("Quarantäne ist leer.")

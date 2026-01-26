@@ -13,26 +13,11 @@ try:
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
-# Einfaches Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(message)s',
-    handlers=[
-        logging.FileHandler("logs/processing.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+# Logging und Config
+import config.config as cfg
 logger = logging.getLogger("InputGate")
 
-
-# =============================================================================
-# KONFIGURATION - Alles an einem Ort
-# =============================================================================
-MODEL_LIMITS = {
-    "Mistral OCR": {"max_mb": 50, "max_pages": 1000},
-    "Gemini OCR": {"max_mb": 50, "max_pages": None},
-}
-
+# === Magic Bytes für Dateityp-Erkennung ===
 MAGIC_BYTES = {
     ".pdf": b"%PDF",
     ".jpg": b"\xff\xd8\xff",
@@ -203,7 +188,7 @@ class InputGate:
                       page_count: int, target_model: str) -> ValidationResult:
         """Prüft ob Datei innerhalb der Modell-Limits liegt."""
         
-        limits = MODEL_LIMITS.get(target_model, {"max_mb": 50, "max_pages": 1000})
+        limits = cfg.MODEL_LIMITS.get(target_model, {"max_mb": 50, "max_pages": 1000})
         warnings = []
         
         # Größen-Limit
