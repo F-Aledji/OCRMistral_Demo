@@ -24,6 +24,7 @@ Kontext:
 - Absender ist der Lieferant.
 
 BEFOLGE DIESE REGELN STRIKT:
+0. **Anzahl Positionen**: Zähle alle Positionen auch Splitteile (Kennzeichne splits bitte) damit du einen Überblick gewinnst wie viele Positionen auf jeden Fall extrahiert werden müssen.
 1. **Layout-Treue:** Trenne Kopfdaten strikt von den Positionsdaten.
 2. **Daten-Logik:** Fasse mehrzeilige Artikelbeschreibungen in einem Block zusammen.
 3. **Nummern-Fokus:** Suche aggressiv nach Strings, die mit "BA", "BE" oder "100-" beginnen. "BA-Nummern" sind unsere Referenznummern.
@@ -44,6 +45,7 @@ BEFOLGE DIESE REGELN STRIKT:
    [15, 93, 90, 80, 62, 94, 84, 83, 33, 97, 92, 70, 91, 89, 24, 98, 81, 73, 99, 72, 14, 53, 31, 82, 32, 60, 29, 85, 59, 96, 13, 45, 17, 46, 40, 20, 47, 51, 26, 63, 16, 86, 28, 61, 58, 55, 88, 95, 30, 23, 50, 54, STS, DEB, DEW, DEA, 77, FIS, FIH, DAS, STH, DAB, 10, 27, DAH, 25, MOR, 56, BA3, HFD, MOP, SFD, MON, DASR, BA4, STQ, DANHR, DASLE, DAHLE, 11, FLB, FLA, MOBPS, 52, KB3, MOH, DEE, DANLE, DALN, DALNLE, DAN, VTB, 34, 19, 79, 12]
 12. **Positionsnummern-Logik:** Falls keine Nummer vorhanden, zähle selbstständig hoch (1, 2, 3...).
 
+
 **OUTPUT-FORMAT:**
 Gib die Daten in einer strukturierten Liste aus. Verwende KEINE Markdown-Tabellen.
 Nutze Trenner `---` zwischen Positionen.
@@ -56,6 +58,7 @@ Nutze Trenner `---` zwischen Positionen.
 - **Referenz:** [BA-Nummer(n)]
 
 ## POSITIONEN
+** Anzahl Positionen: [Anzahl Insgesamt] **
 ---
 **Pos**: [Nummer]
 - **Unsere_Art_Nr**: [Wert oder "Nicht gefunden"]
