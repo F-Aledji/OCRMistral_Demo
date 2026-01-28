@@ -22,7 +22,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 FOLDERS = {
     "INPUT": os.path.join(PROJECT_ROOT, "01_Input_PDF"),
-    "OUTPUT": os.path.join(PROJECT_ROOT, "02_Output_XML"),
+    "OUTPUT": r"J:\\TRANSFER\\RETARUS\\Test\\AIValidator\\XML\\Debug",
     "TRACE": os.path.join(PROJECT_ROOT, "03_Process_Trace"),
     "ERROR": os.path.join(PROJECT_ROOT, "98_Error_Quarantine"),
     "ARCHIVE": os.path.join(PROJECT_ROOT, "99_Archive_Success")

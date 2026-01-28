@@ -26,6 +26,7 @@ def setup_folders():
 
 # Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur
 def save_process_trace(filename, result_data):
+    """Speichert die Prozessdaten ((optional Markdown), JSON, XML) in den Trace Ordner für die Nachverfolgung."""
     try:
         # Dateinamen ohne Endung holen
         base_name = os.path.splitext(filename)[0]
@@ -46,8 +47,18 @@ def save_process_trace(filename, result_data):
 
         #3 XML speichern
         if "xml" in result_data:
-            with open(os.path.join(trace_dir, "3_final.xml"), "w", encoding="utf-8") as f:
-                f.write(result_data["xml"])
+            xml_content = result_data["xml"]
+            # Checken ob Liste (Mehrere Dokumente) oder String (Einzel/Error)
+            if isinstance(xml_content, list):
+                for idx, xml_str in enumerate(xml_content):
+                    # Bei Liste hängen wir Index an: 3_final_0.xml, 3_final_1.xml
+                    suffix = f"_{idx}" if len(xml_content) > 1 else ""
+                    with open(os.path.join(trace_dir, f"3_final{suffix}.xml"), "w", encoding="utf-8") as f:
+                        f.write(xml_str)
+            else:
+                # String Fallback
+                with open(os.path.join(trace_dir, "3_final.xml"), "w", encoding="utf-8") as f:
+                    f.write(xml_content)
 
         #4 Log schreiben
         status_msg = "Success" if result_data.get("success", False) else "Failed"
@@ -55,16 +66,14 @@ def save_process_trace(filename, result_data):
         
         with open(os.path.join(trace_dir, "process_log.txt"), "w", encoding="utf-8") as f:
             f.write(f"Processed on: {datetime.now().isoformat()}\n")
+            f.write(f"Filename: {filename}\n")
             f.write(f"Status: {status_msg}{error_info}\n")
     except Exception as e:
         logger.error(f"Error saving process trace for {filename}: {e}")
 
 def safe_move_file(src_path, dest_folder):
-    """
-    Verschiebt eine Datei sicher in den Zielordner.
-    Falls der Dateiname dort schon existiert, wird ein Zeitstempel angehängt.
-    Versucht es bei PermissionError (Datei blockiert) kurz erneut.
-    """
+    """Verschiebt eine Datei sicher in den Zielordner. Versucht es bei PermissionError (Datei blockiert) kurz erneut."""
+    
     if not os.path.exists(src_path):
         return
 
@@ -79,7 +88,7 @@ def safe_move_file(src_path, dest_folder):
         dest_path = os.path.join(dest_folder, new_filename)
         logger.info(f"⚠️ Datei existiert bereits im Ziel. Umbenannt zu: {new_filename}")
 
-    # 2. Verschieben mit Retry Logic (für PermissionError)
+    # 2. Verschieben mit Retry Logic (für PermissionError) also falls die Datei noch von einem anderen Prozess genutzt wird
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -97,6 +106,7 @@ def safe_move_file(src_path, dest_folder):
             return
 
 def main():
+    """Hauptfunktion des Batch Runners. Startet die Überwachung und Verarbeitung."""
     logger.info("--Starte Batch Verarbeitung--")
     setup_folders() #Ordner erstellen wenn nicht vorhanden
     # Einrichten der Engines
@@ -122,6 +132,7 @@ def main():
 
     logger.info(f"Überwachung aktiviert für Ordner: {cfg.FOLDERS['INPUT']}")
     logger.info("Drücken Sie STRG+C zum Beenden.")
+    logger.info("-----------------------------------")
 
     # --- Main Loop ---
     waiting_message_shown = False
@@ -148,18 +159,31 @@ def main():
                 except OSError:
                     continue
 
-                logger.info(f"⚡Verarbeite Datei: {filename}")
+                logger.info(f"⚡Verarbeite jetzt Datei: {filename}")
 
                 # ----- AB HIER CODE ZUM: PIPELINE STARTEN ------
                 # Mode: Classic für OCR -> Markdown -> LLM -> XML
+                # Mode: Direct JSON für OCR -> JSON -> XML (nur Gemini OCR + LLM)
 
-                result = controller.process_document(file_path, pipeline_mode="Classic")
+                result = controller.process_document(file_path, pipeline_mode="Direct JSON") # kann hier auch "Classic" sein
 
                 if result["success"]:
                     # A. Output XML
-                    xml_filename = os.path.splitext(filename)[0] + ".xml"
-                    with open(os.path.join(cfg.FOLDERS["OUTPUT"], xml_filename), "w", encoding="utf-8") as f:
-                        f.write(result["xml"])
+                    xml_content = result["xml"]
+                    base_xml_name = os.path.splitext(filename)[0]
+
+                    if isinstance(xml_content, list):
+                         for idx, xml_str in enumerate(xml_content):
+                            # Suffix beim Output Ordner
+                            suffix = f"_{idx+1}" if len(xml_content) > 1 else ""
+                            xml_filename = f"{base_xml_name}{suffix}.xml"
+                            with open(os.path.join(cfg.FOLDERS["OUTPUT"], xml_filename), "w", encoding="utf-8") as f:
+                                f.write(xml_str)
+                    else:
+                        # String Fallback
+                        xml_filename = base_xml_name + ".xml"
+                        with open(os.path.join(cfg.FOLDERS["OUTPUT"], xml_filename), "w", encoding="utf-8") as f:
+                            f.write(xml_content)
 
                     # B. Prozess Trace speichern
                     save_process_trace(filename, result)
@@ -189,17 +213,13 @@ def main():
                     # 3. Sonstige Fehler (Leeres JSON, Bad Request 400, Parse Error) -> QUARANTÄNE
                     logger.warning(f"❌ Fehler bei der Verarbeitung von {filename}: {error_msg}")
 
-                     # Auch im Fehlerfall Trace Daten speichern (dank Anpassung im Controller sind die da)
+                     # Auch im Fehlerfall Trace Daten speichern 
                     save_process_trace(filename, result)
 
                     # Verschieben nach Error Quarantine
                     safe_move_file(file_path, cfg.FOLDERS["ERROR"])
 
                     # Log schreiben
-                    # Wir müssen den Pfad neu berechnen, da safe_move_file evtl umbenannt hat
-                    # Aber das Error Log braucht keinen unique name zwingend, oder wir schreiben es in den Trace
-                    # Besser: Wir schreiben das Error Log direkt für den Originalnamen in den Error Ordner
-                    # Falls die Datei umbenannt wurde, heisst das Textfile halt anders -> akzeptabel.
                     error_destination = os.path.join(cfg.FOLDERS["ERROR"], filename)
                     with open(error_destination + ".txt", "w", encoding="utf-8") as f:
                         f.write(f"Zeitpunkt: {datetime.now()}\nError: {error_msg}\n")

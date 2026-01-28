@@ -40,7 +40,7 @@ class PipelineController:
     # OCR Prozess + Direct JSON Generierung
     def _run_ocr(self, processed_bytes, filename, pipeline_mode="Classic"):
 
-        # führt OCr durch und unterscheidet nach PDF oder Bild und nach Pipeline Mode
+        # führt OCR durch und unterscheidet nach PDF oder Bild und nach Pipeline Mode
         is_pdf = filename.lower().endswith(".pdf")
         ocr_json_schema = None
 
@@ -114,7 +114,13 @@ class PipelineController:
                     
                     if not json_data:
                         # Hier greift auch der Fall json_data == {}
-                        error_detail = xml_output if xml_output else "LLM lieferte leeres JSON Objekt"
+                        error_detail = "LLM lieferte leeres JSON Objekt"
+                        if xml_output:
+                            if isinstance(xml_output, list):
+                                error_detail = "; ".join(xml_output)
+                            else:
+                                error_detail = xml_output
+
                         return {
                             "success": False,
                             "error": f"Extraction Error: {error_detail}",
