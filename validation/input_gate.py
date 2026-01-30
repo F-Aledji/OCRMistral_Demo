@@ -48,7 +48,10 @@ class ValidationResult:
 class InputGate:
     """Validiert Dateien vor OCR API-Aufrufen."""
     
-    def __init__(self, quarantine_dir: str = "_qurantine"):
+    def __init__(self, quarantine_dir: str = None):
+        # Fallback auf ERROR-Ordner aus Config wenn kein Pfad übergeben
+        if quarantine_dir is None:
+            quarantine_dir = cfg.FOLDERS.get("ERROR", "98_Error_Quarantine")
         self.quarantine_dir = Path(quarantine_dir)
         self.quarantine_dir.mkdir(exist_ok=True)
         Path("logs").mkdir(exist_ok=True)

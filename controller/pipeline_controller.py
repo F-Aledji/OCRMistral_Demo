@@ -2,171 +2,187 @@
 import json
 import os
 import logging
+from typing import Dict, Any, Optional, Tuple
 from pydantic import ValidationError
 from schema.models import Document
 from validation.input_gate import InputGate
+from validation.judge import Judge
 from validation.post_processing import generate_xml_from_data
 from jinja2 import Environment, FileSystemLoader
 import config.config as cfg
 
 logger = logging.getLogger(__name__)
 
+
 class PipelineController:
     
-    # Konstruktor Args sind das OCR-Modell und das LLM-Modell für das JSON generierung, Project root ist das XML Template Verzeichnis
-    # So bin ich immer flexibel was die Modelle angeht
     def __init__(self, project_root, ocr_engine, llm_engine=None):
+        """Konstruktor: OCR-Engine, optionales LLM, und Project-Root für Templates."""
         self.project_root = project_root
         self.ocr_engine = ocr_engine
         self.llm_engine = llm_engine
-        # InputGate initialisieren - nutzt ERROR Ordner für Quarantäne
         self.input_gate = InputGate(quarantine_dir=cfg.FOLDERS["ERROR"])
-        ## Template Umgebung für XML laden
         self.env = Environment(loader=FileSystemLoader(project_root))
         self.ba_number_list = []
-        self.ba_number_file = os.path.join(self.project_root, "config", "ba_numbers.txt") # kann auch anders lauten
+        self.ba_number_file = os.path.join(self.project_root, "config", "ba_numbers.txt")
+        self.judge = Judge()  # Judge für Reparaturversuche
     
-    def get_validation_context(self):
-        """Lädt die eraubten BA-Nummern aus der Datei. Prio auf Datei statt Liste"""
+    # =========================================================================
+    # HELPER METHODS
+    # =========================================================================
+    
+    def get_validation_context(self) -> Dict[str, Any]:
+        """Lädt die erlaubten BA-Nummern aus Datei oder Liste."""
         valid_bas = []
-
-        # Versuch aus Datei zu laden
         if os.path.exists(self.ba_number_file):
             try:
                 with open(self.ba_number_file, "r", encoding="utf-8") as f:
-                    # Zeile für zeile, leerzeichen weg, leere zeilen ignorieren
                     valid_bas = [line.strip() for line in f if line.strip()]
             except Exception as e:
-                logger.error(f"BA-Liste konnte nicht geladen werden {e}")
-
-        # Versuch aus der Liste zu laden
+                logger.error(f"BA-Liste konnte nicht geladen werden: {e}")
         if not valid_bas: 
             valid_bas = self.ba_number_list
-
         return {"valid_ba_list": valid_bas}
 
+    def _validate_file(self, file_bytes: bytes, filename: str, model_name: str) -> Tuple[bool, str, Optional[bytes]]:
+        """Validiert die Eingabedatei über InputGate."""
+        result = self.input_gate.validate(file_bytes=file_bytes, filename=filename, target_model=model_name)
+        if not result.is_valid:
+            return False, result.error_message, None
+        return True, "", result.processed_bytes or file_bytes
 
-    # Validierung der Datei:
-    def _validate_file(self, file_bytes, filename, model_name):
-        validation_result = self.input_gate.validate(file_bytes=file_bytes, filename=filename, target_model=model_name)
-        if not validation_result.is_valid:
-            return False, validation_result.error_message, None
-        
-        # Hier werden die bereinigten Bytes zurückgegeben (z.B ohne leere Seiten) 
-        processed_bytes = validation_result.processed_bytes or file_bytes
-        return True, "", processed_bytes
-
-
-    # OCR Prozess + Direct JSON Generierung
-    def _run_ocr(self, processed_bytes, filename, pipeline_mode="Classic"):
-        # führt OCR durch und unterscheidet nach PDF oder Bild und nach Pipeline Mode
+    def _run_ocr(self, processed_bytes: bytes, filename: str, pipeline_mode: str = "Classic") -> Tuple[str, Optional[Dict]]:
+        """Führt OCR durch und gibt extrahierten Text + Schema zurück."""
         is_pdf = filename.lower().endswith(".pdf")
         ocr_json_schema = None
 
-        # Schema laden für Direct JSON Mode (nur gemini)
         if pipeline_mode == "Direct JSON" and "Gemini" in self.ocr_engine.__class__.__name__:
             schema_path = os.path.join(self.project_root, "schema", "schema.json")
             with open(schema_path, "r", encoding="utf-8") as f:
                 ocr_json_schema = json.load(f)
 
-
-        # Unterscheidung PDF vs Bild
         if is_pdf:
-            # bei "Direct JSON" Modus direkt an die OCR Engine
-            response = self.ocr_engine.process_pdf(processed_bytes,stream=False, json_schema=ocr_json_schema)
-
+            response = self.ocr_engine.process_pdf(processed_bytes, stream=False, json_schema=ocr_json_schema)
         else:
             response = self.ocr_engine.process_image(processed_bytes, json_schema=ocr_json_schema)
 
         return response.text, ocr_json_schema
-        
 
-
-    def process_document(self, file_path, pipeline_mode="Classic"):
-            #Hauptfunktion: Steuert den gesamten Ablauf für eine Datei.
-            filename = os.path.basename(file_path)
-            
-            # 1. Datei lesen
-            with open(file_path, "rb") as f:
-                file_bytes = f.read()
-
-            # 2. Validieren
-            # Wir nehmen hier einfach "Gemini OCR" als Standard für Limits an, oder du übergibst es
-            is_valid, error_msg, processed_bytes = self._validate_file(file_bytes, filename, "Gemini OCR")
-            if not is_valid:
-                return {"success": False, "error": error_msg, "filename": filename}
-
+    def _extract_json_data(self, extracted_text: str, pipeline_mode: str, used_schema: Optional[Dict], filename: str) -> Tuple[Optional[Dict], Optional[str]]:
+        """Extrahiert JSON-Daten aus OCR-Text oder via LLM."""
+        if pipeline_mode == "Direct JSON" and used_schema:
             try:
-                # 3. OCR Ausführen
-                extracted_text, used_schema = self._run_ocr(processed_bytes, filename, pipeline_mode)
+                return json.loads(extracted_text), None
+            except json.JSONDecodeError as e:
+                return None, f"Modell lieferte ungültiges JSON: {e}"
+        elif self.llm_engine:
+            raw_json_data, _ = self.llm_engine.extract_and_generate_xml(extracted_text)
+            return raw_json_data, None
+        return None, "Kein Extraktionsmodus verfügbar"
 
-                if not extracted_text or not extracted_text.strip():
-                     return {
-                        "success": False, 
-                        "error": "OCR Warning: Extrahierter Text ist leer.", 
-                        "filename": filename
-                    }
+    def _format_validation_errors(self, ve: ValidationError) -> Tuple[str, list]:
+        """Formatiert Pydantic ValidationErrors für Logging und Judge."""
+        error_list = []
+        error_messages = []
+        for err in ve.errors():
+            loc = "->".join(str(x) for x in err.get('loc', []))
+            msg = err.get('msg', 'Unbekannter Fehler')
+            error_messages.append(f"Feld {loc}: {msg}")
+            error_list.append({"field": loc, "message": msg})
+        return " | ".join(error_messages), error_list
 
-                # 4. Daten Extraktion (LLM oder Parse)
-                raw_json_data = {}
+    def _try_validate_with_repair(
+        self, 
+        raw_json: Dict, 
+        file_bytes: bytes, 
+        filename: str, 
+        context: Dict,
+        max_retries: int = 1
+    ) -> Tuple[Optional[Document], Optional[str], Optional[Dict]]:
+        """
+        Validiert JSON-Daten mit optionalem Judge-Reparaturversuch.
+        Returns: (validated_doc, error_message, final_raw_json)
+        """
+        current_json = raw_json
+        
+        for attempt in range(max_retries + 1):
+            try:
+                validated_doc = Document.model_validate(current_json, context=context)
+                if attempt > 0:
+                    logger.info(f"Judge-Reparatur erfolgreich für {filename} (Versuch {attempt})")
+                return validated_doc, None, current_json
+            
+            except ValidationError as ve:
+                error_msg, error_list = self._format_validation_errors(ve)
+                logger.warning(f"Validierungsfehler für {filename} (Versuch {attempt + 1}): {error_msg}")
                 
-                if pipeline_mode == "Direct JSON" and used_schema:
-                    try:
-                    # Wir haben schon JSON im Text
-                        raw_json_data = json.loads(extracted_text)
-                    except json.JSONDecodeError as e:
-                        return {
-                            "success": False,
-                            "error": f"Modell lieferte ungültiges JSON: {e}",
-                            "filename": filename
-                        }
-                    
-                elif self.llm_engine:
-                    # Code für Classic Mode: Markdown -> LLM
-                    # 
-                    raw_json_data, xml_output = self.llm_engine.extract_and_generate_xml(extracted_text)
-                    
-                if not raw_json_data:
-                    return {"success": False, "error": "Keine Daten extrahiert", "filename": filename}
-                # Falls Direct JSON Mode (hier müssen wir Rules + XML manuell machen)
+                # Bei letztem Versuch: Fehler zurückgeben
+                if attempt >= max_retries:
+                    return None, error_msg, current_json
+                
+                # Judge-Reparatur versuchen
+                logger.info(f"Starte Judge-Reparatur für {filename}...")
+                healed_json = self.judge.heal_json(file_bytes, filename, current_json, error_list)
+                
+                if not healed_json:
+                    logger.warning(f"Judge konnte {filename} nicht reparieren")
+                    return None, error_msg, current_json
+                
+                current_json = healed_json
+        
+        return None, "Maximale Reparaturversuche erreicht", current_json
 
-                # -- Pydantic Validierung und Logik
-                try: 
-                    # A Kontext laden (BA Nummern)
-                    validation_context = self.get_validation_context()
+    def _build_result(self, success: bool, filename: str, **kwargs) -> Dict[str, Any]:
+        """Erstellt ein standardisiertes Ergebnis-Dictionary."""
+        result = {"success": success, "filename": filename}
+        result.update(kwargs)
+        return result
 
-                    # B. Validierung  & Cleaning starten: Float, Datum, BA Nummern prüfen
-                    validated_doc = Document.model_validate(raw_json_data, context=validation_context)
+    # =========================================================================
+    # MAIN PROCESSING METHOD
+    # =========================================================================
 
-                    # C. Saubere Daten exportieren
-                    clean_json_data = validated_doc.model_dump(by_alias=True, mode="json") # modeldump erstell ein dict 
-                    
-                    # D. XML Generierung (mit sauberen Daten)
-                    xml_generated = generate_xml_from_data(clean_json_data, self.env)
+    def process_document(self, file_path: str, pipeline_mode: str = "Classic") -> Dict[str, Any]:
+        """Hauptfunktion: Steuert den gesamten Verarbeitungsablauf für eine Datei."""
+        filename = os.path.basename(file_path)
+        
+        # 1. Datei lesen
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
 
-                    return{
-                        "success": True,
-                        "json": clean_json_data,
-                        "xml": xml_generated,
-                        "filename": filename
-                     }
-                except ValidationError as ve:
-                    # --- hier komt der Judge --- aktuell nur ein Abbruch mit Fehler
-                    logger.error(f"Validierungsfehler für {filename}: {ve}")
-                    error_messages = []
-                    for i in ve.errors():
-                        location = "->".join(str(x) for x in i['location'])
-                        message = i['message']
-                        error_messages.append(f"Feld {location}: {message}")
+        # 2. Input-Validierung
+        is_valid, error_msg, processed_bytes = self._validate_file(file_bytes, filename, "Gemini OCR")
+        if not is_valid:
+            return self._build_result(False, filename, error=error_msg)
 
-                    full_error_message = " | ".join(error_messages)
+        try:
+            # 3. OCR ausführen
+            extracted_text, used_schema = self._run_ocr(processed_bytes, filename, pipeline_mode)
+            if not extracted_text or not extracted_text.strip():
+                return self._build_result(False, filename, error="OCR: Extrahierter Text ist leer")
 
-                    return {
-                        "success": False,
-                        "error": f"Validierungsfehler: {full_error_message}",
-                        "filename": filename,
-                        "raw_json": raw_json_data # zum Debuggen wegen fehler
-                    }
+            # 4. JSON-Daten extrahieren
+            raw_json_data, extract_error = self._extract_json_data(extracted_text, pipeline_mode, used_schema, filename)
+            if extract_error:
+                return self._build_result(False, filename, error=extract_error)
+            if not raw_json_data:
+                return self._build_result(False, filename, error="Keine Daten extrahiert")
 
-            except Exception as e:
-                return {"success": False, "error": str(e), "filename": filename}
+            # 5. Pydantic-Validierung mit Judge-Reparatur
+            validation_context = self.get_validation_context()
+            validated_doc, val_error, final_json = self._try_validate_with_repair(
+                raw_json_data, file_bytes, filename, validation_context
+            )
+            
+            if val_error:
+                return self._build_result(False, filename, error=f"Validierungsfehler: {val_error}", raw_json=final_json)
+
+            # 6. XML generieren
+            clean_json_data = validated_doc.model_dump(by_alias=True, mode="json")
+            xml_generated = generate_xml_from_data(clean_json_data, self.env)
+
+            return self._build_result(True, filename, json=clean_json_data, xml=xml_generated)
+
+        except Exception as e:
+            logger.exception(f"Unerwarteter Fehler bei {filename}")
+            return self._build_result(False, filename, error=str(e))

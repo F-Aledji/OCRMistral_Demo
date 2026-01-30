@@ -97,8 +97,8 @@ def clean_ba_number(v: Any, info:ValidationInfo) -> str:
     
     #Context Prüfung (Datenbank-Simulation)
     if info.context: 
-        # Es wird nach 'valid_ba_numbers' gesucht
-        valid_list = info.context.get('valid_ba_numbers')
+        # Key muss mit pipeline_controller.get_validation_context() übereinstimmen
+        valid_list = info.context.get('valid_ba_list')
 
         if valid_list:
             if s.upper() not in [x.upper() for x in valid_list]:

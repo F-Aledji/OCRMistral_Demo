@@ -5,12 +5,13 @@ from typing import Any, Dict
 from google import genai
 from google.genai import types
 from llm.base_llm import BaseLLM
+from utils.schema_utils import clean_json_schema
 import config.config as cfg
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_INSTRUCTIONS = """Du bist ein Markdown zu JSON parser. Du erhältst Markdown-Text und eine JSON-Schema Definition. Deine Aufgabe ist es, die relevanten Daten aus dem Markdown basierend des Schemas zu extrahieren und sie in einem validen JSON-Format zurückzugeben.
-"""
+# Einfacher Prompt - bleibt inline
+SYSTEM_INSTRUCTIONS = "Du bist ein Markdown zu JSON parser. Du erhältst Markdown-Text und eine JSON-Schema Definition. Deine Aufgabe ist es, die relevanten Daten aus dem Markdown basierend des Schemas zu extrahieren und sie in einem validen JSON-Format zurückzugeben."
 
 class GeminiLLM(BaseLLM):
     def __init__(self, project_root: str):
@@ -49,19 +50,12 @@ class GeminiLLM(BaseLLM):
         """
 
         try:
-            # Schema Cleaning: Gemini expects a slightly different schema structure sometimes, 
-            # but standard JSON schema usually works with recent Vertex AI versions.
-            # Removing '$schema' key if present as it might cause issues.
-            qs = extraction_schema.copy()
-            if '$schema' in qs:
-                del qs['$schema']
-
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    response_schema=qs,
+                    response_schema=clean_json_schema(extraction_schema),
                     thinking_config=types.ThinkingConfig(
                         thinking_level=types.ThinkingLevel.LOW),
                     system_instruction=SYSTEM_INSTRUCTIONS

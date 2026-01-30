@@ -4,6 +4,8 @@ import os
 import base64
 from typing import List, Dict, Any, Optional
 import config.config as cfg
+from utils.prompt_loader import load_prompt
+
 # Clients laden
 try:
     from google import genai
@@ -65,17 +67,8 @@ class Judge:
         # 1. Prompt vorbereiten
         error_report = "\n".join([f"- Feld '{err['field']}': {err['message']}" for err in error_list])
 
-        system_prompt = """Du bist ein Experte für Daten-Korrektur (Data Remediation). 
-                            Dein Job ist es, fehlerhafte JSON-Daten einer OCR-Extraktion zu reparieren.
-                            Du erhältst:
-                            1. Das Original-Dokument (Bild/PDF).
-                            2. Das extrahierte JSON, das Validierungsfehler enthält.
-                            3. Eine Liste der Fehler.
-
-                            Deine Aufgabe:
-                            - Analysiere das Bild an den betroffenen Stellen.
-                            - Korrigiere die Werte im JSON, damit sie den Validierungsregeln entsprechen (z.B. Datumsformat, Menge > 0, Preisformat).
-                            - Du erhältst ein JSON-Schema zur Orientierung.""" 
+        # System-Prompt aus Datei laden
+        system_prompt = load_prompt("judge_repair") 
 
         user_prompt = f"""Hier sind die Daten, die repariert werden müssen:
                         Fehlerbericht:

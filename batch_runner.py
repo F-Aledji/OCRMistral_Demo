@@ -18,11 +18,15 @@ from llm.gemini_llm import GeminiLLM
 logger = cfg.setup_logging("BatchRunner")
 
 def setup_folders():
-    """Erstellt alle notwendigen Ordner beim Start."""
+    """Erstellt alle notwendigen Ordner beim Start. Externe Pfade werden übersprungen."""
     for name, path in cfg.FOLDERS.items():
         if not os.path.exists(path):
-            os.makedirs(path)
-            logger.info(f"Ordner erstellt: {path}")
+            try:
+                os.makedirs(path)
+                logger.info(f"Ordner erstellt: {path}")
+            except OSError as e:
+                # Externe Laufwerke (z.B. J:) sind evtl. nicht verfügbar
+                logger.warning(f"Ordner '{name}' ({path}) konnte nicht erstellt werden: {e}")
 
 # Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur
 def save_process_trace(filename, result_data):
@@ -69,7 +73,7 @@ def save_process_trace(filename, result_data):
             f.write(f"Filename: {filename}\n")
             f.write(f"Status: {status_msg}{error_info}\n")
     except Exception as e:
-        logger.error(f"Error saving process trace for {filename}: {e}")
+        logger.error(f"Fehler beim Speichern der Prozessdaten für {filename}: {e}")
 
 def safe_move_file(src_path, dest_folder):
     """Verschiebt eine Datei sicher in den Zielordner. Versucht es bei PermissionError (Datei blockiert) kurz erneut."""
@@ -86,7 +90,7 @@ def safe_move_file(src_path, dest_folder):
         name, ext = os.path.splitext(filename)
         new_filename = f"{name}_{timestamp}{ext}"
         dest_path = os.path.join(dest_folder, new_filename)
-        logger.info(f"⚠️ Datei existiert bereits im Ziel. Umbenannt zu: {new_filename}")
+        logger.info(f"Datei existiert bereits im Ziel. Umbenannt zu: {new_filename}")
 
     # 2. Verschieben mit Retry Logic (für PermissionError) also falls die Datei noch von einem anderen Prozess genutzt wird
     max_retries = 3
@@ -96,13 +100,13 @@ def safe_move_file(src_path, dest_folder):
             return
         except PermissionError:
             if attempt < max_retries - 1:
-                logger.warning(f"⏳ Datei {filename} ist gesperrt. Warte 2s... (Versuch {attempt+1}/{max_retries})")
+                logger.warning(f"Datei {filename} ist gesperrt. Warte 2s... (Versuch {attempt+1}/{max_retries})")
                 time.sleep(2)
             else:
-                logger.error(f"❌ Konnte Datei nicht verschieben (Zugriff verweigert): {filename}")
+                logger.error(f"Konnte Datei nicht verschieben (Zugriff verweigert): {filename}")
                 # Wir lassen sie im Input liegen, damit sie nicht verloren geht, aber loggen den Fehler.
         except Exception as e:
-            logger.error(f"❌ Kritischer Fehler beim Verschieben von {filename}: {e}")
+            logger.error(f"Kritischer Fehler beim Verschieben von {filename}: {e}")
             return
 
 def main():
@@ -160,7 +164,7 @@ def main():
                 except OSError:
                     continue
 
-                logger.info(f"⚡Verarbeite jetzt Datei: {filename}")
+                logger.info(f"Verarbeite Datei: {filename}")
 
                 # ----- AB HIER CODE ZUM: PIPELINE STARTEN ------
                 # Mode: Classic für OCR -> Markdown -> LLM -> XML
@@ -191,14 +195,14 @@ def main():
 
                     # C. Datei in Archiv verschieben
                     safe_move_file(file_path, cfg.FOLDERS["ARCHIVE"])
-                    logger.info(f"✅ Erfolgreich verarbeitet: {filename} & XML erstellt und gespeichert")
+                    logger.info(f"Erfolgreich verarbeitet: {filename} - XML erstellt und gespeichert")
 
                 else:
                     error_msg = str(result['error'])
                     
                     # 1. Check auf AUTH Fehler (401/403) -> SOFORT STOPPEN
                     if "401" in error_msg or "403" in error_msg or "Unauthenticated" in error_msg or "PermissionDenied" in error_msg:
-                        logger.critical(f"⛔ KRITISCHER AUTH-FEHLER: {error_msg}")
+                        logger.critical(f"KRITISCHER AUTH-FEHLER: {error_msg}")
                         logger.critical("Der Runner wird beendet, um weitere Probleme zu vermeiden. Bitte API-Key/Service Account prüfen.")
                         return # Beendet die main() Funktion und damit das Skript
                     
@@ -206,13 +210,13 @@ def main():
                     # 429 = Quota, 5xx = Server Error, Timeout = Verbindung
                     if any(x in error_msg for x in ["429", "RESOURCE_EXHAUSTED", "quota", "500", "503", "InternalServerError", "ServiceUnavailable", "Timeout", "ConnectionError"]):
                         wait_time = cfg.RETRY_WAIT_SECONDS
-                        logger.warning(f"⚠️ Temporäres API/Netzwerk-Problem ({error_msg}).") 
+                        logger.warning(f"Temporäres API/Netzwerk-Problem ({error_msg}).") 
                         logger.warning(f"Datei bleibt im Input. Warte {wait_time} Sekunden und versuche es erneut...")
                         time.sleep(wait_time)
                         continue # Nächste Iteration = Retry
                     
                     # 3. Sonstige Fehler (Leeres JSON, Bad Request 400, Parse Error) -> QUARANTÄNE
-                    logger.warning(f"❌ Fehler bei der Verarbeitung von {filename}: {error_msg}")
+                    logger.warning(f"Fehler bei der Verarbeitung von {filename}: {error_msg}")
 
                      # Auch im Fehlerfall Trace Daten speichern 
                     save_process_trace(filename, result)
