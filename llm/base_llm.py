@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import json
 import os
 from jinja2 import Environment, FileSystemLoader
-from validation.post_processing import enforce_business_rules, generate_xml_from_data
+from validation.post_processing import generate_xml_from_data
 
 class BaseLLM(ABC):
     def __init__(self, project_root):
@@ -32,9 +32,6 @@ class BaseLLM(ABC):
         
         if not data:
              return {}, "Keine Daten extrahiert."
-
-        # Rules
-        data = enforce_business_rules(data)
 
         # XML
         xml_output = generate_xml_from_data(data, self.env)

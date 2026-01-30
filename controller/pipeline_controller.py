@@ -1,10 +1,11 @@
 # ersetzt app.py für die Pipeline Steuerung zuvor war es in app.py
-
 import json
 import os
 import logging
+from pydantic import ValidationError
+from schema.models import Document
 from validation.input_gate import InputGate
-from validation.post_processing import enforce_business_rules, generate_xml_from_data
+from validation.post_processing import generate_xml_from_data
 from jinja2 import Environment, FileSystemLoader
 import config.config as cfg
 
@@ -18,17 +19,36 @@ class PipelineController:
         self.project_root = project_root
         self.ocr_engine = ocr_engine
         self.llm_engine = llm_engine
-        
         # InputGate initialisieren - nutzt ERROR Ordner für Quarantäne
         self.input_gate = InputGate(quarantine_dir=cfg.FOLDERS["ERROR"])
-
         ## Template Umgebung für XML laden
         self.env = Environment(loader=FileSystemLoader(project_root))
+        self.ba_number_list = []
+        self.ba_number_file = os.path.join(self.project_root, "config", "ba_numbers.txt") # kann auch anders lauten
+    
+    def get_validation_context(self):
+        """Lädt die eraubten BA-Nummern aus der Datei. Prio auf Datei statt Liste"""
+        valid_bas = []
+
+        # Versuch aus Datei zu laden
+        if os.path.exists(self.ba_number_file):
+            try:
+                with open(self.ba_number_file, "r", encoding="utf-8") as f:
+                    # Zeile für zeile, leerzeichen weg, leere zeilen ignorieren
+                    valid_bas = [line.strip() for line in f if line.strip()]
+            except Exception as e:
+                logger.error(f"BA-Liste konnte nicht geladen werden {e}")
+
+        # Versuch aus der Liste zu laden
+        if not valid_bas: 
+            valid_bas = self.ba_number_list
+
+        return {"valid_ba_list": valid_bas}
+
 
     # Validierung der Datei:
     def _validate_file(self, file_bytes, filename, model_name):
         validation_result = self.input_gate.validate(file_bytes=file_bytes, filename=filename, target_model=model_name)
-
         if not validation_result.is_valid:
             return False, validation_result.error_message, None
         
@@ -39,7 +59,6 @@ class PipelineController:
 
     # OCR Prozess + Direct JSON Generierung
     def _run_ocr(self, processed_bytes, filename, pipeline_mode="Classic"):
-
         # führt OCR durch und unterscheidet nach PDF oder Bild und nach Pipeline Mode
         is_pdf = filename.lower().endswith(".pdf")
         ocr_json_schema = None
@@ -59,17 +78,7 @@ class PipelineController:
         else:
             response = self.ocr_engine.process_image(processed_bytes, json_schema=ocr_json_schema)
 
-        # Ergebnis extrahieren
-        # Mistral gibt ein Objekt mit .pages zrück, gemini ein repsonse object
-
-        if hasattr(response, "pages"):
-            text_content = ""
-            for page in response.pages:
-                text_content += page.markdown + "\n\n"
-            return text_content, None #Kein JSON Objekt
-        
-        else: # gemini
-            return response.text, ocr_json_schema
+        return response.text, ocr_json_schema
         
 
 
@@ -99,55 +108,65 @@ class PipelineController:
                     }
 
                 # 4. Daten Extraktion (LLM oder Parse)
-                json_data = {}
+                raw_json_data = {}
                 
                 if pipeline_mode == "Direct JSON" and used_schema:
+                    try:
                     # Wir haben schon JSON im Text
-                    json_data = json.loads(extracted_text)
-                elif self.llm_engine:
-                    # Classic Mode: Markdown -> LLM
-                    # Die extract_and_generate_xml Methode im LLM macht schon Rules + XML,
-                    # aber wir wollen es hier kontrollieren, also rufen wir nur extraction auf
-                    # Schau in deine base_llm.py: extract_and_generate_xml macht alles.
-                    # Nutzen wir das der Einfachheit halber:
-                    json_data, xml_output = self.llm_engine.extract_and_generate_xml(extracted_text)
-                    
-                    if not json_data:
-                        # Hier greift auch der Fall json_data == {}
-                        error_detail = "LLM lieferte leeres JSON Objekt"
-                        if xml_output:
-                            if isinstance(xml_output, list):
-                                error_detail = "; ".join(xml_output)
-                            else:
-                                error_detail = xml_output
-
+                        raw_json_data = json.loads(extracted_text)
+                    except json.JSONDecodeError as e:
                         return {
                             "success": False,
-                            "error": f"Extraction Error: {error_detail}",
-                            "filename": filename,
-                            "markdown": extracted_text # Markdown zurückgeben für Debugging
+                            "error": f"Modell lieferte ungültiges JSON: {e}",
+                            "filename": filename
                         }
+                    
+                elif self.llm_engine:
+                    # Code für Classic Mode: Markdown -> LLM
+                    # 
+                    raw_json_data, xml_output = self.llm_engine.extract_and_generate_xml(extracted_text)
+                    
+                if not raw_json_data:
+                    return {"success": False, "error": "Keine Daten extrahiert", "filename": filename}
+                # Falls Direct JSON Mode (hier müssen wir Rules + XML manuell machen)
+
+                # -- Pydantic Validierung und Logik
+                try: 
+                    # A Kontext laden (BA Nummern)
+                    validation_context = self.get_validation_context()
+
+                    # B. Validierung  & Cleaning starten: Float, Datum, BA Nummern prüfen
+                    validated_doc = Document.model_validate(raw_json_data, context=validation_context)
+
+                    # C. Saubere Daten exportieren
+                    clean_json_data = validated_doc.model_dump(by_alias=True, mode="json") # modeldump erstell ein dict 
+                    
+                    # D. XML Generierung (mit sauberen Daten)
+                    xml_generated = generate_xml_from_data(clean_json_data, self.env)
+
+                    return{
+                        "success": True,
+                        "json": clean_json_data,
+                        "xml": xml_generated,
+                        "filename": filename
+                     }
+                except ValidationError as ve:
+                    # --- hier komt der Judge --- aktuell nur ein Abbruch mit Fehler
+                    logger.error(f"Validierungsfehler für {filename}: {ve}")
+                    error_messages = []
+                    for i in ve.errors():
+                        location = "->".join(str(x) for x in i['location'])
+                        message = i['message']
+                        error_messages.append(f"Feld {location}: {message}")
+
+                    full_error_message = " | ".join(error_messages)
 
                     return {
-                        "success": True, 
-                        "json": json_data, 
-                        "xml": xml_output, 
+                        "success": False,
+                        "error": f"Validierungsfehler: {full_error_message}",
                         "filename": filename,
-                        "markdown": extracted_text # Markdown ist auch im Success Fall sinnvoll
+                        "raw_json": raw_json_data # zum Debuggen wegen fehler
                     }
-                
-                # Falls Direct JSON Mode (hier müssen wir Rules + XML manuell machen)
-                if json_data:
-                    json_data = enforce_business_rules(json_data)
-                    xml_output = generate_xml_from_data(json_data, self.env)
-                    return {
-                        "success": True, 
-                        "json": json_data, 
-                        "xml": xml_output, 
-                        "filename": filename
-                    }
-                
-                return {"success": False, "error": "Keine Daten extrahiert", "filename": filename}
 
             except Exception as e:
                 return {"success": False, "error": str(e), "filename": filename}

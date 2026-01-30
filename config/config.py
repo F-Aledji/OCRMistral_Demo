@@ -9,7 +9,7 @@ load_dotenv(override=True)
 # === API Keys & Credentials ===
 
 # Mistral AI Einstellungen
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+# MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 # Google Gemini / Vertex AI Einstellungen
 GEMINI_PROJECT_ID = os.getenv("GEMINI_PROJECT_ID", "")
 GEMINI_LOCATION = os.getenv("GEMINI_LOCATION", "global")
@@ -30,9 +30,15 @@ FOLDERS = {
 
 # === Modelle ===
 GEMINI_OCR_MODEL = "gemini-3-flash-preview"
+#GEMINI_OCR_MODEL = "gemini-3-pro-flash"
 GEMINI_LLM_MODEL = "gemini-3-pro-preview"
 OPENAI_MODEL = "gpt-5.1"
-MISTRAL_OCR_MODEL = "mistral-ocr-latest"
+# MISTRAL_OCR_MODEL = "mistral-ocr-latest"
+
+# === Judge Einstellung ===
+JUDGE_PROVIDER = "Google"
+JUDGE_MODEL = "gemini-3-pro-preview"
+
 
 # === Processing Einstellungen ===
 RETRY_WAIT_SECONDS = 60 # Wartezeit zwischen Retries bei temporären Fehlern in der Verarbeitung
@@ -41,7 +47,7 @@ POLLING_INTERVAL = 5 # Das ist dafür da dass der Batch Runner nicht permanent d
 
 # === Model Limits für InputGate ===
 MODEL_LIMITS = {
-    "Mistral OCR": {"max_mb": 50, "max_pages": 1000},
+    # "Mistral OCR": {"max_mb": 50, "max_pages": 1000},
     "Gemini OCR": {"max_mb": 50, "max_pages": None},
 }
 

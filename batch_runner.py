@@ -109,7 +109,6 @@ def main():
     """Hauptfunktion des Batch Runners. Startet die Überwachung und Verarbeitung."""
     logger.info("--Starte Batch Verarbeitung--")
     setup_folders() #Ordner erstellen wenn nicht vorhanden
-    # Einrichten der Engines
     project_root = cfg.PROJECT_ROOT
 
     # OCR Engine initialisieren
@@ -131,8 +130,10 @@ def main():
     controller = PipelineController(project_root, ocr_engine, llm_engine)
 
     logger.info(f"Überwachung aktiviert für Ordner: {cfg.FOLDERS['INPUT']}")
-    logger.info("Drücken Sie STRG+C zum Beenden.")
-    logger.info("-----------------------------------")
+    logger.info(f"Judge Provider: {cfg.JUDGE_PROVIDER} mit Modell: {cfg.JUDGE_MODEL}")
+    logger.info("===================================")
+    logger.info("Drücke STRG+C zum Beenden.")
+    logger.info("===================================")
 
     # --- Main Loop ---
     waiting_message_shown = False
