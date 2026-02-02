@@ -5,6 +5,7 @@ import base64
 from typing import List, Dict, Any, Optional
 import config.config as cfg
 from utils.prompt_loader import load_prompt
+from utils.schema_utils import clean_json_schema
 
 # Clients laden
 try:
@@ -27,7 +28,18 @@ class Judge:
         self.provider = cfg.JUDGE_PROVIDER
         self.model = cfg.JUDGE_MODEL
         self.client = None
+        self.schema = self._load_schema()
         self._setup_client()
+
+    def _load_schema(self) -> Optional[Dict[str, Any]]:
+        """Lädt das JSON-Schema für Structured Output."""
+        schema_path = os.path.join(cfg.PROJECT_ROOT, "schema", "schema.json")
+        try:
+            with open(schema_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Konnte Schema nicht laden: {schema_path} ({e})")
+            return None
 
     def _setup_client(self):
         """Initialisiert den Client basierend auf dem konfigierten Provider in Config/config.py"""
@@ -40,9 +52,14 @@ class Judge:
             project_id = cfg.GEMINI_PROJECT_ID
             location = cfg.GEMINI_LOCATION
 
+            if project_id:
+                os.environ["PROJECT_ID"] = project_id
+            if cfg.GEMINI_CREDENTIALS:
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cfg.GEMINI_CREDENTIALS
+
             try: 
                 if project_id:
-                    self.client= genai.Client(vertexai=True, project_id=project_id, location=location)
+                    self.client = genai.Client(vertexai=True, project=project_id, location=location)
                 else:
                     logger.warning("Meldung zum Judge: Kein Google Projekt ID konfiguriert.")
             except Exception as e:
@@ -92,27 +109,23 @@ class Judge:
         """Aktiviert Google GenAI für den Judge Prozess."""
         mime_type = "application/pdf" if filename.lower().endswith(".pdf") else "image/png"
 
-        # Konfiguration für JSON Output
+        config_args = {
+            "response_mime_type": "application/json",
+            "system_instruction": system_prompt
+        }
 
+        if self.schema:
+            config_args["response_schema"] = clean_json_schema(self.schema)
+
+        # Standard-Aufruf (SDK): client.models.generate_content(model=..., contents=[...], config={...})
+        # Hier: wir senden Text + Datei als Part, erzwingen JSON-Output + optionales Schema.
         response = self.client.models.generate_content(
-            model =self.model,
-            contents=[types.Content(
-                    role="user",
-                    parts=[
-                        types.Part(text=user_prompt),
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type=mime_type,
-                                data=file_bytes
-
-                            )
-                        )
-                    ]
-                    
-                )
+            model=self.model,
+            contents=[
+                user_prompt,
+                types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
             ],
-            config= types.GenerationContentConfig(response_mime_type="application/json",system_instructions=system_prompt
-        )
+            config=config_args
         )
 
         if response.text:

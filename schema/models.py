@@ -146,7 +146,7 @@ CleanIntType = Annotated[
     BeforeValidator(parse_int)
 ]
 
-# Datum: Strin/KW -> sauberes dd.mm.yyyy
+# Datum: String/KW -> sauberes dd.mm.yyyy
 
 DateType = Annotated[
     str, 

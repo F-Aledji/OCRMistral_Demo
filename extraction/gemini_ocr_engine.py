@@ -78,23 +78,15 @@ class GeminiOCR(BaseOCR):
         # Method selection
         method = self.client.models.generate_content_stream if stream else self.client.models.generate_content
         
+        # Standard-Aufruf (SDK): client.models.generate_content(model=..., contents=[...], config={...})
+        # Hier: wir senden Text + Datei als Part und erzwingen bei Bedarf Structured Output via Schema.
         response = method(
             model=self.model_name,
             contents=[
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part(text=USER_PROMPT),
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type=mime_type,
-                                data=file_bytes
-                            ),
-                        )
-                    ]
-                )
+                USER_PROMPT,
+                types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
             ],
-            config=types.GenerateContentConfig(**config_args)
+            config=config_args
         )
        
         return response
