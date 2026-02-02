@@ -237,6 +237,8 @@ class SupplierConfirmation(BaseModel):
     # Erlaubt Zugriff via Alias (z.B. JSON Keys) UND Python-Namen
     model_config = ConfigDict(populate_by_name=True)
 
+    reasoning: str =Field(alias="reasoning", description="Chain of Thought")
+
     supplierConfirmationData: SupplierConfirmationData
     invoiceSupplierData: InvoiceSupplierData
     invoicingData: InvoicingData = Field(alias="invoicingData")

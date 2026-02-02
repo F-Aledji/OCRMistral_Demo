@@ -28,8 +28,36 @@ def setup_folders():
                 # Externe Laufwerke (z.B. J:) sind evtl. nicht verfügbar
                 logger.warning(f"Ordner '{name}' ({path}) konnte nicht erstellt werden: {e}")
 
-# Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur
-def save_process_trace(filename, result_data):
+# Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur -> Funktion: safe_filename_fragment schaut ob in Modellnamen ungültige Zeichen sind
+def _safe_filename_fragment(value: str) -> str:
+    """Bereinigt einen String für Dateinamen."""
+    return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in value).strip("_")
+
+# Falls mehere BA_Nummern pro BA Nummer ein Reasoning Text
+def _extract_reasoning_texts(result_data):
+    """Extrahiert Reasoning-Texte je Dokument aus dem JSON (string oder liste)."""
+    try:
+        docs = result_data.get("json", {}).get("documents", [])
+        per_doc_texts = []
+        for doc in docs:
+            reasoning = (
+                doc.get("SupplierConfirmation", {})
+                .get("reasoning")
+            )
+            if reasoning is None:
+                per_doc_texts.append([])
+                continue
+            if isinstance(reasoning, list):
+                per_doc_texts.append([str(x).strip() for x in reasoning if str(x).strip()])
+            else:
+                text = str(reasoning).strip()
+                per_doc_texts.append([text] if text else [])
+        return per_doc_texts
+    except Exception:
+        return []
+
+
+def save_process_trace(filename, result_data, reasoning_model_name: str = None):
     """Speichert die Prozessdaten ((optional Markdown), JSON, XML) in den Trace Ordner für die Nachverfolgung."""
     try:
         # Dateinamen ohne Endung holen
@@ -48,6 +76,22 @@ def save_process_trace(filename, result_data):
         if "json" in result_data:
             with open(os.path.join(trace_dir, "2_extracted_data.json"), "w", encoding="utf-8") as f:
                 json.dump(result_data["json"], f, indent=4, ensure_ascii=False)
+
+        #2b. Reasoning separat speichern (falls vorhanden)
+        reasoning_by_doc = _extract_reasoning_texts(result_data)
+        if reasoning_by_doc:
+            model_name = reasoning_model_name or cfg.GEMINI_OCR_MODEL
+            model_fragment = _safe_filename_fragment(model_name or "unknown")
+            for idx, texts in enumerate(reasoning_by_doc):
+                if not texts:
+                    continue
+                suffix = f"_{idx}" if len(reasoning_by_doc) > 1 else ""
+                reasoning_path = os.path.join(
+                    trace_dir,
+                    f"reasoning_{model_fragment}{suffix}.txt"
+                )
+                with open(reasoning_path, "w", encoding="utf-8") as f:
+                    f.write("\n\n".join(texts))
 
         #3 XML speichern
         if "xml" in result_data:
@@ -191,7 +235,7 @@ def main():
                             f.write(xml_content)
 
                     # B. Prozess Trace speichern
-                    save_process_trace(filename, result)
+                    save_process_trace(filename, result, reasoning_model_name=cfg.GEMINI_OCR_MODEL)
 
                     # C. Datei in Archiv verschieben
                     safe_move_file(file_path, cfg.FOLDERS["ARCHIVE"])
@@ -219,7 +263,7 @@ def main():
                     logger.warning(f"Fehler bei der Verarbeitung von {filename}: {error_msg}")
 
                      # Auch im Fehlerfall Trace Daten speichern 
-                    save_process_trace(filename, result)
+                    save_process_trace(filename, result, reasoning_model_name=cfg.GEMINI_OCR_MODEL)
 
                     # Verschieben nach Error Quarantine
                     safe_move_file(file_path, cfg.FOLDERS["ERROR"])

@@ -1,4 +1,3 @@
-# ersetzt app.py für die Pipeline Steuerung zuvor war es in app.py
 import json
 import os
 import logging

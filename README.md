@@ -36,18 +36,11 @@ OUTPUT_PATH=/pfad/zum/output/ordner
 
 ## Starten
 
-### Batch-Runner (Hauptanwendung)
+### Batch-Runner starten
 Überwacht den Input-Ordner und verarbeitet PDFs automatisch:
 
 ```bash
 python batch_runner.py
-```
-
-### Dashboard (Monitoring)
-Streamlit-Dashboard zur Überwachung:
-
-```bash
-streamlit run app.py
 ```
 
 ## Ordnerstruktur
