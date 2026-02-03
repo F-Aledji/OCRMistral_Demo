@@ -1,14 +1,17 @@
 import json
 import os
 import logging
+from dataclasses import asdict
 from typing import Dict, Any, Optional, Tuple
 from pydantic import ValidationError
 from schema.models import Document
 from validation.input_gate import InputGate
 from validation.judge import Judge
 from validation.post_processing import generate_xml_from_data
+from validation.score import ScoreEngine
 from jinja2 import Environment, FileSystemLoader
 import config.config as cfg
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class PipelineController:
         self.ba_number_list = []
         self.ba_number_file = os.path.join(self.project_root, "config", "ba_numbers.txt")
         self.judge = Judge()  # Judge für Reparaturversuche
-    
+        self.score_engine = ScoreEngine()  # ScoreEngine für Bewertung
     # =========================================================================
     # HELPER METHODS
     # =========================================================================
@@ -180,7 +183,20 @@ class PipelineController:
             clean_json_data = validated_doc.model_dump(by_alias=True, mode="json")
             xml_generated = generate_xml_from_data(clean_json_data, self.env)
 
-            return self._build_result(True, filename, json=clean_json_data, xml=xml_generated)
+            # 7. Scoring
+            scorer = ScoreEngine()
+            score_cards = [] # Die Bewertungs_Ergebniss werden hier gesammelt beispiel {"total_score": 85, "penalties": [...], "signals": [...]}
+            for doc in validated_doc.documents:
+                score_card = scorer.evaluate(doc.supplierConfirmation)
+                score_cards.append(asdict(score_card))
+
+            return self._build_result(
+                True,
+                filename,
+                json=clean_json_data,
+                xml=xml_generated,
+                score_cards=score_cards,
+            )
 
         except Exception as e:
             logger.exception(f"Unerwarteter Fehler bei {filename}")

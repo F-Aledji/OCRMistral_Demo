@@ -6,285 +6,394 @@ from typing_extensions import Annotated
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator, AfterValidator, model_validator, ValidationInfo
 from typing import Any, List, Optional
 
-#--- 1. Helper Funktionen --- 
+#--- 1. Helper Funktionen für Soft Validierung --- 
 
-# parse_float macht aus Strings mit Zahlen einen sauberen Float ohne Dezimalpunkte.
 def parse_float(v: Any) -> float:
-    """Macht aus Strings mit Zahlen einen saubeen Float ohne Dezimalpunkte."""
-    if isinstance(v, float):
-        return v
-    if isinstance(v, int):
-        return float(v)
+    """Macht aus Strings mit Zahlen einen sauberen Float ohne Dezimalpunkte."""
+    if isinstance(v, float): return v
+    if isinstance(v, int): return float(v)
     
-    # Bereinige String wenn s leer dann 0.0
     s = str(v).strip()
-    # FIX: "Nicht gefunden" und andere Platzhalter abfangen -> 0.0
-    if not s or s.lower() in ["nicht gefunden", "unsicher", "none", "null"]:
+    
+    if not s or s.lower() in ["nicht gefunden", "unsicher", "none", "null", "n/a"]:
         return 0.0
     
-    ## Entferne Tausendertrenner bsp 1.000,00 -> 1000,00
+    # Entferne Tausendertrenner bsp 1.000,00 -> 1000,00 (DE Logic check)
     if "." in s and "," in s:
-        s = s.replace(".","")
-    
-    s = s.replace(",",".")
+        if s.rfind(",") > s.rfind("."): # Format 1.000,00
+            s = s.replace(".", "").replace(",", ".")
+        else: # Format 1,000.00
+            s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".")
 
     try:
         return float(s)
     except ValueError:
-        # Fallback auf 0.0 statt Crash, falls OCR Text liefert
         return 0.0 
 
-# parse_int macht aus Strings mit Zahlen einen saubeen Int.
 def parse_int(v: Any) -> int:
-    """Macht aus Strings mit Zahlen einen saubeen Int."""
-    if isinstance(v, int):
-        return v
-    if isinstance(v, float):
-        return int(v)
+    """Macht aus Strings mit Zahlen einen sauberen Int."""
+    if isinstance(v, int): return v
+    if isinstance(v, float): return int(v)
     
     s = str(v).strip()
-    # FIX: Auch hier "Nicht gefunden" abfangen
-    if not s or s.lower() in ["nicht gefunden", "unsicher", "none", "null"]:
-        return 0
+    if not s or s.lower() in ["nicht gefunden", "unsicher", "none", "null", "n/a"]:
+        return 0 # FIX: Muss int sein, nicht 0.0
 
-    # Entferne Tausendertrenner bsp 1.000 -> 1000
     s = s.replace(".","").replace(",","")
+    s = re.sub(r'[^\d-]', '', s) # Nur Zahlen behalten
     
     try:
         return int(s)
     except ValueError:
         return 0
     
-# parse_smart_date macht aus 'dd.mm.yyyy', 'KW 40' oder 'KW40 2025' immer 'dd.mm.yyyy'
 def parse_smart_date(v: Any) -> Optional[str]:
-    """ Versteht 'dd.mm.yyyy', 'KW 40' oder 'KW40 2025. Gibt immer 'dd.mm.yyyy' zurück oder Fehler."""
+    """ Versteht 'dd.mm.yyyy', 'KW 40'. Gibt immer 'dd.mm.yyyy' zurück oder Fehler."""
 
-    if not v or str(v).lower() in ["nicht gefunden", "none", "unsicher"]:
+    if not v or str(v).lower() in ["nicht gefunden", "none", "unsicher", "n/a"]:
         return None
 
     s = str(v).strip()
 
-    # 1. Check auf Kalenderwoche (z.B. "KW 40", "KW40", "40. KW")
+    # 1. Check auf Kalenderwoche
     kw_match = re.search(r'(?i)KW\s*(\d{1,2})', s)
     if kw_match:
         kw = int(kw_match.group(1))
-        # Wir nehmen das aktuelle Jahr an, wenn keines gefunden wird.
         year_match = re.search(r'20\d{2}', s)
         year = int(year_match.group(0)) if year_match else datetime.now().year
-
-        # # Montag der KW berechnen (%G=ISO-Jahr, %V=ISO-KW, %u=Tag 1=Montag)
         try:
             date_time = datetime.strptime(f"{year}-W{kw}-1", "%G-W%V-%u")
             return date_time.strftime("%d.%m.%Y")
         except ValueError:
-            raise ValueError(f"Ungültige KW-Angabe: {s}")
+            return None # Soft fail
         
-    # 2. Standard Datum bereinigen (z.B. Trenner '#' zu '.')
+    # 2. Standard Datum bereinigen
     s = s.replace('#', '.').replace('/', '.').replace('-', '.').strip()
 
+    # FIX: Erst Deutsches Format versuchen!
     try: 
-        datetime.strptime(s, "%d.%m.%Y")
-        return s
+        dt = datetime.strptime(s, "%d.%m.%Y")
+        return dt.strftime("%d.%m.%Y")
     except ValueError:
-        raise ValueError(f"Ungültiges Datumsformat: {v}")
+        pass
+
+    # Fallback ISO Format
+    try:
+        dt = datetime.strptime(s, "%Y.%m.%d")
+        return dt.strftime("%d.%m.%Y")
+    except ValueError:
+        return None 
     
 def clean_ba_number(v: Any, info:ValidationInfo) -> str:
-    """Prüft gegen BA-Liste aus Array oder Datei"""
-
+    """Prüft gegen BA-Liste aus Context (falls vorhanden)."""
     s = str(v).strip()
-    if not s or s.lower() in ["nicht gefunden", "none"]:
+    if not s or s.lower() in ["nicht gefunden", "none", "null"]:
         return "Nicht gefunden"
     
-    #Context Prüfung (Datenbank-Simulation)
-    if info.context: 
-        # Key muss mit pipeline_controller.get_validation_context() übereinstimmen
-        valid_list = info.context.get('valid_ba_list')
-
-        if valid_list:
-            if s.upper() not in [x.upper() for x in valid_list]:
-                raise ValueError(f"BA Nummer '{s}' ist unbekannt.")
+    s = s.replace("BA", "").strip()
     
-    return s
+    # Context Prüfung nur vorbereitet, keine Exception werfen für Soft-Validation
+    if info.context: 
+        valid_list = info.context.get('valid_ba_list')
+        if valid_list:
+            pass 
+    
+    return "BA" + s
 
-def ensure_positive_number(v: float) -> float:
-    """Stellt sicher, dass die Zahl positiv ist."""
-    # Bei 0.0 (Fallback von oben) wollen wir keinen Fehler werfen, 
-    # es sei denn, Menge MUSS > 0 sein. Für Preise ist 0 oft "auf Anfrage".
-    # Wenn strikt > 0 gefordert, dann so lassen, aber bedenken dass "Nicht gefunden" jetzt den Fehler hier triggert.
-    # Ich ändere es auf >= 0 um "Nicht gefunden" (0.0) durchzulassen, außer du willst strikt Fehler.
-    if v < 0: 
-        raise ValueError("Der Wert darf nicht negativ sein.")
-    return v
+def clean_currency(v: Any) -> str:
+    """Bereinigt Währungen (z.B. 'EUR ' -> 'EUR')."""
+    s = str(v).strip().upper()
+    if "EUR" in s: return "EUR"
+    if "USD" in s: return "USD"
+    if len(s) == 3: return s
+    return "EUR"
 
 def round_price(v: float) -> float:
-    """Rundet den Preis auf 2 Nachkommastellen."""
     return round(v, 2)
+
+def parse_discount(v: Any) -> dict:
+    """
+    Parst Rabattwerte. Erkennt Prozent (z.B. '15%') oder Absolutbeträge.
+    Gibt ein Dict zurück: {'is_percent': bool, 'value': float}
+    """
+    if v is None or v == "":
+        return {'is_percent': False, 'value': 0.0}
+    
+    if isinstance(v, dict):
+        # Bereits geparst
+        return v
+    
+    if isinstance(v, (int, float)):
+        return {'is_percent': False, 'value': float(v)}
+    
+    s = str(v).strip()
+    
+    if not s or s.lower() in ["nicht gefunden", "unsicher", "none", "null", "n/a", "0", "0.0"]:
+        return {'is_percent': False, 'value': 0.0}
+    
+    # Check auf Prozent
+    if '%' in s:
+        # Extrahiere Zahl vor %
+        percent_match = re.search(r'([\d,.]+)\s*%', s)
+        if percent_match:
+            percent_str = percent_match.group(1).replace(',', '.')
+            try:
+                return {'is_percent': True, 'value': float(percent_str)}
+            except ValueError:
+                return {'is_percent': False, 'value': 0.0}
+    
+    # Ansonsten als Absolutbetrag behandeln
+    return {'is_percent': False, 'value': parse_float(s)}
 
 
 # --- 2. Typ Definition ----
 
-# Geld: String -> Float dann Check ob > 0 dann runden auf 2 Nachkommastellen
-# MoneyType ist ein erweitertet Datentyp der wenn man ihn setzte diese Validierungen durchführt
 MoneyType = Annotated[
     float,
     BeforeValidator(parse_float),
-    AfterValidator(ensure_positive_number),
     AfterValidator(round_price)
 ]
 
-
-# Menge: String -> zu Int dann Check ob > 0 
 QuantityType = Annotated[
     int,
     BeforeValidator(parse_int),
-    AfterValidator(ensure_positive_number)
 ]
 
-# NEU: CleanIntType für normale Integer (ohne >0 Zwang), die bereinigt werden müssen
 CleanIntType = Annotated[
     int,
     BeforeValidator(parse_int)
 ]
 
-# Datum: String/KW -> sauberes dd.mm.yyyy
-
 DateType = Annotated[
-    str, 
+    Optional[str], 
     BeforeValidator(parse_smart_date)
 ]
 
-# BA_Number String -> Bereinigt -> DB-Check
 BAType = Annotated[
     str,
     BeforeValidator(clean_ba_number)
 ]
 
+CurrencyType = Annotated[ # FIX: Tippfehler korrigiert
+    str,
+    BeforeValidator(clean_currency)
+]
+
+DiscountType = Annotated[
+    dict,
+    BeforeValidator(parse_discount)
+]
 
 # 3. --- Modelle ---
 
 class Currency(BaseModel):
-    isoCode: str = Field(default="EUR", pattern="^[A-Z]{3}$")
+    isoCode: CurrencyType = Field(default="EUR", description="ISO Währungscode, z.B. 'EUR' für Euro.")
 
 class GrossPrice(BaseModel):
-    amount: MoneyType # Erweiterter Type
-     # Alias zeigt auf JSON-Key 'Currency'
+    amount: MoneyType = Field(description="Der Brutto-Listenpreis pro Einheit vor Abzug von Rabatten. Falls im Dokument nur ein bereits rabattierter Netto-Einzelpreis steht, nimm diesen als Basiswert.")
     currency: Currency = Field(alias="Currency")
 
 class DeliveryDate(BaseModel):
     specialValue: str = Field(default="NONE", description="Spezialwert für das Lieferdatum. Immer 'NONE' setzen.")
-    date: Optional[DateType] = Field(default=None, description="Liefertermin...")
+    date: DateType = Field(default=None, description="Liefertermin falls im Dokument vorhanden.")
     
 class CorrespondenceDetail(BaseModel):
     number: Optional[str] = None
     
 class Uom(BaseModel):
-    code : str = Field(default= "Stk", description="mengeneinheit. Setze diesen Wert immer auf 'Stk'.")
+    code : str = Field(default= "Stk", description="Mengeneinheit. Setze diesen Wert immer auf 'Stk'.")
 
 class TotalQuantity(BaseModel):
-    amount: QuantityType = Field(description="Die extrahierte Menge...")
-    # FIX: Alias hinzugefügt, da JSON 'Uom' (groß) liefert
+    amount: QuantityType = Field(description="Die extrahierte Menge der Artikel pro Position")
     uom: Uom = Field(alias="Uom") 
 
 class Details(BaseModel):
     sequence: int = Field(default=0)
-    # FIX: Verwende CleanIntType statt int, um 'Nicht gefunden' abzufangen
-    number: CleanIntType  
-
+    number: CleanIntType = Field(description="Die Positionsnummer der Zeile im Dokument.")
     totalQuantity: TotalQuantity
     deliveryDate: DeliveryDate
     grossPrice: GrossPrice
-    #  Alias 'CorrespondenceDetail'
     correspondenceDetail: CorrespondenceDetail = Field(alias="CorrespondenceDetail")
+
+    # ---- Für Mathe Check ----
+    lineTotalAmount: MoneyType = Field(description="Der finale Netto-Gesamtbetrag der Zeile. WICHTIG: Dies ist der Wert nach Abzug aller Rabatte (Menge * Einzelpreis - Rabatt). Dieser Wert wird für den Summen-Check im Footer verwendet.")
+    math_status: str = Field(default="OK", description="Status der rechnerischen Prüfung")
+    discount: DiscountType = Field(default={'is_percent': False, 'value': 0.0}, description="Der gewährte Rabatt auf die Position. Kann als Prozentsatz (z. B. '15%') oder als Absolutbetrag extrahiert werden. Falls kein Rabatt explizit ausgewiesen ist, setze 0.")
 
     @model_validator(mode='after')
     def fix_position_number(self):
         """Multipliziert die Positionsnummer mit 10."""
         raw_num = self.number
-        self.number = raw_num * 10
+        if raw_num > 0:
+            self.number = raw_num * 10
+            if self.correspondenceDetail:
+                self.correspondenceDetail.number = str(raw_num * 10)
+        return self
+    
+    @model_validator(mode='after')
+    def validate_math(self):
+        qty = self.totalQuantity.amount
+        price = self.grossPrice.amount
+        total_extracted = self.lineTotalAmount
         
-        # Prüfen ob CorrespondenceDetail existiert da dies der selbe Wert sein soll wie die Positionsnummer
-        if self.correspondenceDetail and self.correspondenceDetail.number is not None:
-            self.correspondenceDetail.number = str(raw_num * 10)
+        # Rabatt auswerten
+        discount_info = self.discount if isinstance(self.discount, dict) else {'is_percent': False, 'value': 0.0}
+        is_percent = discount_info.get('is_percent', False)
+        discount_value = discount_info.get('value', 0.0)
         
+        # Leere Werte ignorieren (Warnung im Scoring)
+        if qty == 0 or price == 0.0:
+            self.math_status = "Warnung: Menge/Preis = 0"
+            return self
+        
+        # Berechnung mit Rabatt
+        if is_percent:
+            # Prozentrabatt: Menge * Preis * (1 - Prozent/100)
+            calculated = round(qty * price * (1 - discount_value / 100), 2)
+            discount_desc = f"{discount_value}%"
+        else:
+            # Absolutrabatt: Menge * Preis - Rabattbetrag
+            calculated = round(qty * price - discount_value, 2)
+            discount_desc = f"{discount_value}€"
+        
+        # Toleranz von 5 Cent
+        if abs(calculated - total_extracted) > 0.05:
+            if discount_value > 0:
+                self.math_status = f"FEHLER: [{qty} * {price} - Rabatt({discount_desc}) = {calculated}, jedoch im Dokument {total_extracted} extrahiert.]"
+            else:
+                self.math_status = f"FEHLER: [{qty} * {price} = {calculated}, jedoch im Dokument {total_extracted} extrahiert.]"
+        else:
+            self.math_status = "OK"
         return self
 
 class Date(BaseModel):
-    value : str = Field(..., description="Das ist das Belegdatum unbedingt auf dd#mm#yyyy formatieren.", pattern=r"^\d{2}\#\d{2}\#\d{4}$") 
+    #Datetype parsed das Datum
+    value: DateType = Field(description="Belegdatum im Format dd.mm.yyyy")
 
 class SupplierConfirmationData(BaseModel):
-    salesConfirmation : str = Field(default="Nicht gefunden", description="Fremdreferenznummer...")
+    salesConfirmation : str = Field(default="Nicht gefunden", description="Fremdreferenznummer der Auftragsbestätigung, falls vorhanden. Nicht mit unserer BA-Nummer verwechseln!")
     date: Date
+    documentType: str = Field(default="Auftragsbestätigung", description="Erkannter Typ (AB, Rechnung, Storno, Lieferschein)")
 
 class SupplierPartner(BaseModel):
-    # FIX: Verwende CleanIntType statt int, um 'Nicht gefunden' abzufangen
-    number : CleanIntType
+    number : CleanIntType = Field(default=0,description="Lieferantennummer des Lieferanten. Oft wird die unsere interne Nummer des Lieferanten im Dokumenten angegeben versuche es zu extrahieren")
 
 class InvoiceSupplierData(BaseModel):
-    #  Alias groß
     supplierPartner : SupplierPartner = Field(alias="SupplierPartner")
 
 class Correspondence(BaseModel):
-    number: BAType = Field(default="Nicht gefunden", description="Beschaffungsauftragsnummer")
+    number: BAType = Field(default="Nicht gefunden", description="Beschaffungsauftragsnummer (BA-Nummer). Sehr wichtig bitte angeben ohne Präfix davor")
 
 class Type(BaseModel):
-    code : str = Field(default="100")
+    code : str = Field(default="100", description ="Präfix der Beschaffungsauftragsnummer. Wenn du unsicher bist auf '100' setzen.")
 
 class InvoicingData(BaseModel):
-    PaymentTerms: str = Field(default="", description="Kann leer bleiben.")
+    PaymentTerms: str = Field(default=None, description="Die Zahlungsbedinungen kann aber gerne leer bleiben.")
 
 # --- ROOT MODEL---
 class SupplierConfirmation(BaseModel):
-    # Erlaubt Zugriff via Alias (z.B. JSON Keys) UND Python-Namen
     model_config = ConfigDict(populate_by_name=True)
-
-    reasoning: str =Field(alias="reasoning", description="Chain of Thought")
-
+    
+    reasoning: str = Field(alias="reasoning", description="WICHTIG: Nutze dieses Feld als Schmierblatt! " \
+        "1. Prüfe den Dokumententyp (AB, Rechnung, etc.). " \
+        "2. Suche BA- und AB-Nummer. " \
+        "3. Berechne pro Zeile: (GrossPrice.amount - Rabatt) * Menge. Stimmt das mit lineTotalAmount überein? " \
+        "4. Addiere alle lineTotalAmounts und vergleiche mit documentNetTotal. " \
+        "5. Notiere Unstimmigkeiten und begründe deine Entscheidungen."
+              )
+    
     supplierConfirmationData: SupplierConfirmationData
     invoiceSupplierData: InvoiceSupplierData
     invoicingData: InvoicingData = Field(alias="invoicingData")
     correspondence: Correspondence = Field(alias="Correspondence")
     doc_type: Type = Field(alias="Type")
     details: List[Details] = Field(alias="Details")
+    
+    # Für Scoring und Validierung
+    documentNetTotal: MoneyType = Field(description="Die finale Netto-Gesamtsumme aller Positionen laut Beleg-Footer. Dieser Wert muss der Summe aller lineTotalAmounts entsprechen.")
+    date_plausibility_status: str = Field(default="OK", description="Status der Plausibilitätsprüfung")
+    sum_validation_status: str = Field(default="OK", description="Status der Summenprüfung")
+    doctype_status: str = Field(default="OK", description="Status der Dokumenttyp-Erkennung")
 
-    # Cross-Field Validierung (Lieferdatum nicht vor Belegdatum)
+    # 1. Check: Dokumententyp 
+    @model_validator(mode='after') # Wann dieser Check ausgeführt werden soll es ist ein Tag für die Funktion
+    def check_document_type(self):
+        doc_type = self.supplierConfirmationData.documentType.lower()
+        forbidden_types = ["rechnung", "storno", "lieferschein", "gutschrift", "cancellation"]
+        found = [t for t in forbidden_types if t in doc_type]
+        if found:
+            self.doctype_status = f"FEHLER: Dokumenttyp '{self.supplierConfirmationData.documentType}' enthält verbotene Typen: {', '.join(found)}."
+        else: 
+            self.doctype_status = "OK"
+        return self
+    
+
+    # 2. Check: Datum Plausibilität
     @model_validator(mode='after')
     def check_dates_plausbility(self):
-        header_date_str = self.supplierConfirmationData.date.value.replace('#','.')
+        header_date_str = self.supplierConfirmationData.date.value
+        
         if not header_date_str:
+            self.date_plausibility_status = "Warnung: Belegdatum fehlt."
             return self
+        
         try:
             header_date = datetime.strptime(header_date_str, "%d.%m.%Y")
         except:
-            return self # Skip check if header date is broken
+            self.date_plausibility_status = "Warnung: Belegdatum ungültig."
+            return self 
         
+        errors = []
         for position in self.details:
             if position.deliveryDate.date:
                 try: 
-                    # FIX: Typo striptime -> strptime korrigiert
                     del_date = datetime.strptime(position.deliveryDate.date, "%d.%m.%Y")
-                    # Regel: Liederdatum darf nicht vor Belegdatum sein
+                    # Regel: Lieferdatum darf nicht vor Belegdatum sein
                     if del_date < header_date:
-                        raise ValueError(f"Position {position.number}: Lieferdatum {position.deliveryDate.date} liegt vor Belegdatum {header_date_str}.")
-                except ValueError as e:
+                        # FIX: Hier append statt raise ValueError, sonst stürzt es ab!
+                        errors.append(f"Pos {position.number}: Lieferdatum {position.deliveryDate.date} vor Belegdatum")
+                except ValueError:
                     pass
+        if errors:
+            self.date_plausibility_status = " ; ".join(errors)
+        else:
+            self.date_plausibility_status = "OK"
 
         return self
+    
+    #3. Check: Summen Validierung
+    @model_validator(mode='after')
+    def check_sum_validation(self):
+        calculated_sum = sum(d.lineTotalAmount for d in self.details)
+        footer_total = self.documentNetTotal
 
-#Der Container für ein Dokument in der Liste
+        if footer_total == 0.0:
+            self.sum_validation_status = "Warnung: Footer-Summe 0.0"
+            return self
+        
+        diff = abs(calculated_sum - footer_total)
+        if diff > 1.00:
+            self.sum_validation_status = f"Fehler: Summe Positionen ({calculated_sum}) != Footer ({footer_total}). Diff: {diff:.2f}"
+        else:
+            self.sum_validation_status = "OK"
+        return self
+    
+
 class DocumentItem(BaseModel):
-    supplierConfirmation: SupplierConfirmation = Field(alias="SupplierConfirmation")
+    supplierConfirmation: SupplierConfirmation = Field(alias="SupplierConfirmation", description="Eine extrahierte Auftragsbestätigung basierend der BA-Nummer (Beschaffungsauftragsnummer).")
 
-# Wrapper für die Liste wie im Schema
 class Document(BaseModel):
-    documents: List[DocumentItem]
+    documents: List[DocumentItem] = Field(description="Eine Liste aller erkannten Auftragsbestätigungen im Dokument.")
 
 
 # --- Generierung des JSON Schemas ---
 
 def generate_json_schema():
-    schema_dict = SupplierConfirmation.model_json_schema()
+    schema_dict = Document.model_json_schema()
     
-    filename = 'supplier_schema_generated.json'
+    filename = 'document_schema.json'
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(schema_dict, f, indent=2, ensure_ascii=False)
         

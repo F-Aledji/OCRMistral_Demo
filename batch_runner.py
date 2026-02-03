@@ -30,8 +30,15 @@ def setup_folders():
 
 # Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur -> Funktion: safe_filename_fragment schaut ob in Modellnamen ungültige Zeichen sind
 def _safe_filename_fragment(value: str) -> str:
-    """Bereinigt einen String für Dateinamen."""
-    return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in value).strip("_")
+    """Bereinigt einen String für Dateinamen (inkl. deutscher Umlaute)."""
+    replacement = { "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}
+    for search_for_replacement, target in replacement.items():
+        value = value.replace(search_for_replacement, target)
+
+    return "".join(
+        c if c.isalnum() or c in ("-", "_", ".") else "_"
+         for c in value
+         ).strip("_")
 
 # Falls mehere BA_Nummern pro BA Nummer ein Reasoning Text
 def _extract_reasoning_texts(result_data):
@@ -107,6 +114,15 @@ def save_process_trace(filename, result_data, reasoning_model_name: str = None):
                 # String Fallback
                 with open(os.path.join(trace_dir, "3_final.xml"), "w", encoding="utf-8") as f:
                     f.write(xml_content)
+
+        #3b ScoreCards speichern (falls vorhanden)
+        score_cards = result_data.get("score_cards")
+        if isinstance(score_cards, list) and score_cards:
+            for idx, card in enumerate(score_cards):
+                suffix = f"_{idx}" if len(score_cards) > 1 else ""
+                score_path = os.path.join(trace_dir, f"4_score_card{suffix}.json")
+                with open(score_path, "w", encoding="utf-8") as f:
+                    json.dump(card, f, indent=4, ensure_ascii=False)
 
         #4 Log schreiben
         status_msg = "Success" if result_data.get("success", False) else "Failed"
