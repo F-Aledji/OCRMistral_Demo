@@ -1,33 +1,91 @@
+# =============================================================================
+# MISTRAL OCR ENGINE
+# =============================================================================
+#
+# ZWECK:
+# Wrapper für die Mistral OCR API. Nutzt Mistrals Vision-Modell für 
+# Texterkennung in PDFs und Bildern.
+#
+# FUNKTIONSWEISE:
+# 1. PDF/Bild wird zu Base64 konvertiert
+# 2. Base64-String wird als Data-URL an die API gesendet
+# 3. API liefert strukturierte OCR-Ergebnisse (Text, Tabellen, Bilder)
+#
+# VORTEILE VON MISTRAL OCR:
+# - Sehr gute Tabellenerkennung
+# - Schnelle Verarbeitung
+# - Extraktion von Header/Footer möglich
+#
+# HINWEIS:
+# Diese Engine wird aktuell nicht in der Hauptpipeline verwendet.
+# Die Pipeline nutzt standardmäßig Gemini für Direct JSON Extraction.
+# Mistral OCR ist verfügbar als Alternative für reinen OCR-Workflow.
+#
+# =============================================================================
+
 import os
 import json
 from mistralai import Mistral
 from extraction.base_ocr import BaseOCR
 
 
-#--- OCR Engine Klasse für Mistral OCR ---
 class MistralOCR(BaseOCR):
+    """
+    OCR-Engine für Mistral's Vision-API.
+    
+    Erbt von BaseOCR für gemeinsame Funktionen (Base64-Encoding).
+    
+    Beispiel:
+        engine = MistralOCR(api_key="sk-...")
+        result = engine.process_pdf(pdf_bytes)
+        # result.pages enthält OCR-Ergebnisse pro Seite
+    """
+    
     def __init__(self, MISTRAL_API_KEY):
+        """
+        Initialisiert den Mistral-Client.
+        
+        Args:
+            MISTRAL_API_KEY: API-Schlüssel von console.mistral.ai
+        """
         super().__init__()
         self.client = Mistral(api_key=MISTRAL_API_KEY)
 
-    # funktion um PDF als base64 zu verarbeiten
     def process_pdf(self, file_bytes, stream=False):
         """
-        Impl für Mistral PDF OCR.
-        Stream Parameter wird aktuell ignoriert/nicht unterstützt von Mistral OCR API Wrapper in dieser Form.
+        Verarbeitet ein PDF durch Mistral OCR.
+        
+        Args:
+            file_bytes: PDF-Datei als Bytes
+            stream: (Nicht unterstützt) Für Streaming-Responses
+        
+        Returns:
+            OCRResponse-Objekt mit .pages[] Array
+            Jede Seite enthält:
+            - .markdown: Extrahierter Text als Markdown
+            - .images: Extrahierte Bilder (Base64)
+        
+        API-Details:
+            - model: "mistral-ocr-latest" (aktuellstes OCR-Modell)
+            - extract_header/footer: Extrahiert Kopf-/Fußzeilen separat
+            - include_image_base64: Bilder im Dokument werden zurückgegeben
         """
-        base64_pdf =self.encode_bytes_to_base64(file_bytes)
+        # PDF zu Base64 konvertieren (Methode aus BaseOCR)
+        base64_pdf = self.encode_bytes_to_base64(file_bytes)
 
+        # API-Aufruf
         ocr_response = self.client.ocr.process(
             model="mistral-ocr-latest",
             document={
                 "type": "document_url",
+                # Data-URL Format: data:<mime>;base64,<data>
                 "document_url": f"data:application/pdf;base64,{base64_pdf}" 
             },
             # table_format weggelassen = Tabellen werden inline im Text angezeigt
-            extract_header=True,
-            extract_footer=True,
-            include_image_base64=True
+            # Alternative: table_format="markdown" für separate Tabellen
+            extract_header=True,   # Kopfzeilen separat extrahieren
+            extract_footer=True,   # Fußzeilen separat extrahieren
+            include_image_base64=True  # Bilder aus PDF extrahieren
         )
         return ocr_response
 

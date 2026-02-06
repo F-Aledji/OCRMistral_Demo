@@ -1,3 +1,46 @@
+# =============================================================================
+# BATCH RUNNER - Automatische Hotfolder-Verarbeitung
+# =============================================================================
+#
+# ZWECK:
+# Überwacht einen Input-Ordner und verarbeitet PDFs automatisch durch die
+# OCR-Pipeline. Dies ermöglicht "Drop & Go" Verarbeitung ohne manuelle Arbeit.
+#
+# ORDNERSTRUKTUR (konfiguriert in config/config.py):
+# ┌─────────────────┐
+# │ 01_INPUT        │  ← PDFs hier ablegen zur Verarbeitung
+# └────────┬────────┘
+#          │ Pipeline verarbeitet
+#          ▼
+# ┌─────────────────┐   ┌─────────────────┐
+# │ 02_OUTPUT       │   │ 03_PROCESS_TRACE│  ← JSON, XML, Logs pro Datei
+# │ (XML-Dateien)   │   │ (Debugging)     │
+# └────────┬────────┘   └─────────────────┘
+#          │
+#          ▼
+# ┌─────────────────┐   ┌─────────────────┐
+# │ 04_ARCHIVE      │   │ 98_ERROR        │  ← Bei Fehlern
+# │ (Erfolgreich)   │   │ (Quarantäne)    │
+# └─────────────────┘   └─────────────────┘
+#
+# ABLAUF (Endlosschleife):
+# 1. Scanne Input-Ordner nach PDFs
+# 2. Für jede PDF: OCR → Validierung → Scoring → XML
+# 3. Bei Erfolg: XML nach Output, PDF nach Archive
+# 4. Bei Fehler: PDF nach Error-Quarantäne
+# 5. Warte X Sekunden, dann zurück zu 1.
+#
+# FEHLERBEHANDLUNG:
+# - AUTH-Fehler (401/403): Runner stoppt sofort
+# - Rate-Limits (429): Wartet und versucht erneut
+# - Sonstige Fehler: Datei → Quarantäne
+#
+# USAGE:
+#   python batch_runner.py
+#   (Beenden mit STRG+C)
+#
+# =============================================================================
+
 import os
 import shutil
 import time
@@ -8,17 +51,37 @@ from datetime import datetime
 # Config & Logging
 import config.config as cfg
 
-# Klassen Importieren
-from controller.pipeline_controller import PipelineController
-from extraction.gemini_ocr_engine import GeminiOCR
-from llm.gemini_llm import GeminiLLM
-# Alternativ from llm.openai_llm import OpenAILLM
+# Unified Pipeline importieren (ersetzt PipelineController)
+from core.pipeline import UnifiedPipeline
 
 # Logging Setup
 logger = cfg.setup_logging("BatchRunner")
 
+# -----------------------------------------------------------------------------
+# TRACE DATENBANK
+# -----------------------------------------------------------------------------
+# Speichert Verarbeitungsdaten in SQLite für KPI-Dashboard und Analyse.
+# Falls das Backend-Modul nicht verfügbar ist, läuft der Runner trotzdem.
+
+try:
+    from backend.trace import save_trace
+    TRACE_DB_ENABLED = True
+    logger.info("✓ Trace-Datenbank aktiviert")
+except ImportError as e:
+    TRACE_DB_ENABLED = False
+    logger.warning(f"Trace-DB nicht verfügbar: {e}")
+
+# =============================================================================
+# SETUP & HILFSFUNKTIONEN
+# =============================================================================
+
 def setup_folders():
-    """Erstellt alle notwendigen Ordner beim Start. Externe Pfade werden übersprungen."""
+    """
+    Erstellt alle notwendigen Ordner beim Start.
+    
+    Iteriert über cfg.FOLDERS und erstellt fehlende Verzeichnisse.
+    Externe Laufwerke (z.B. Netzwerk) werden bei Fehler übersprungen.
+    """
     for name, path in cfg.FOLDERS.items():
         if not os.path.exists(path):
             try:
@@ -28,17 +91,26 @@ def setup_folders():
                 # Externe Laufwerke (z.B. J:) sind evtl. nicht verfügbar
                 logger.warning(f"Ordner '{name}' ({path}) konnte nicht erstellt werden: {e}")
 
-# Funktion um Daten in 03_process_trace zu speichern + für AI-korrektur -> Funktion: safe_filename_fragment schaut ob in Modellnamen ungültige Zeichen sind
+
 def _safe_filename_fragment(value: str) -> str:
-    """Bereinigt einen String für Dateinamen (inkl. deutscher Umlaute)."""
-    replacement = { "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}
+    """
+    Bereinigt einen String für sichere Dateinamen.
+    
+    - Ersetzt deutsche Umlaute (ä→ae, ö→oe, etc.)
+    - Entfernt Sonderzeichen (nur alphanumerisch + -_. erlaubt)
+    
+    Beispiel: "Gemini-2.0-Flash (Preview)" → "Gemini-2.0-Flash_Preview"
+    """
+    # Deutsche Umlaute ersetzen
+    replacement = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}
     for search_for_replacement, target in replacement.items():
         value = value.replace(search_for_replacement, target)
 
+    # Nur sichere Zeichen behalten
     return "".join(
         c if c.isalnum() or c in ("-", "_", ".") else "_"
-         for c in value
-         ).strip("_")
+        for c in value
+    ).strip("_")
 
 # Falls mehere BA_Nummern pro BA Nummer ein Reasoning Text
 def _extract_reasoning_texts(result_data):
@@ -174,25 +246,18 @@ def main():
     """Hauptfunktion des Batch Runners. Startet die Überwachung und Verarbeitung."""
     logger.info("--Starte Batch Verarbeitung--")
     setup_folders() #Ordner erstellen wenn nicht vorhanden
-    project_root = cfg.PROJECT_ROOT
 
-    # OCR Engine initialisieren
+    # Prüfe ob GEMINI_PROJECT_ID gesetzt ist
     if not cfg.GEMINI_PROJECT_ID:
         logger.error("GEMINI_PROJECT_ID nicht zu finden. Die Variable muss in der .env Datei gesetzt sein.")
         return
     
-    ocr_engine = GeminiOCR(
-        service_account_json_path=cfg.GEMINI_CREDENTIALS,
-        project_id=cfg.GEMINI_PROJECT_ID,
-        location=cfg.GEMINI_LOCATION
-        )
-    
-    # 2. LLM Engine initialisieren -> hier OpenAI optional Gemini
-    llm_engine = GeminiLLM(project_root) 
-    # Alternativ: llm_engine = OpenAILLM(project_root) 
-
-    # 3. Controller initialisieren
-    controller = PipelineController(project_root, ocr_engine, llm_engine)
+    # UnifiedPipeline initialisieren (handhabt OCR-Engine intern)
+    pipeline = UnifiedPipeline(
+        enable_judge=True,
+        enable_xml=True,
+        quarantine_dir=cfg.FOLDERS["ERROR"]
+    )
 
     logger.info(f"Überwachung aktiviert für Ordner: {cfg.FOLDERS['INPUT']}")
     logger.info(f"Judge Provider: {cfg.JUDGE_PROVIDER} mit Modell: {cfg.JUDGE_MODEL}")
@@ -227,11 +292,9 @@ def main():
 
                 logger.info(f"Verarbeite Datei: {filename}")
 
-                # ----- AB HIER CODE ZUM: PIPELINE STARTEN ------
-                # Mode: Classic für OCR -> Markdown -> LLM -> XML
-                # Mode: Direct JSON für OCR -> JSON -> XML (nur Gemini OCR + LLM)
-
-                result = controller.process_document(file_path, pipeline_mode="Direct JSON") # kann hier auch "Classic" sein
+                # ----- PIPELINE VERARBEITUNG ------
+                pipeline_result = pipeline.process_file(file_path, pipeline_mode="Direct JSON")
+                result = pipeline_result.to_dict()  # Konvertiere zu Dict für Kompatibilität
 
                 if result["success"]:
                     # A. Output XML
@@ -251,8 +314,19 @@ def main():
                         with open(os.path.join(cfg.FOLDERS["OUTPUT"], xml_filename), "w", encoding="utf-8") as f:
                             f.write(xml_content)
 
-                    # B. Prozess Trace speichern
+                    # B. Prozess Trace speichern (Dateien - deprecated)
                     save_process_trace(filename, result, reasoning_model_name=cfg.GEMINI_OCR_MODEL)
+                    
+                    # B2. Trace in Datenbank speichern (neu)
+                    if TRACE_DB_ENABLED:
+                        save_trace(
+                            filename=filename,
+                            result_data=result,
+                            pipeline_mode="Direct JSON",
+                            ocr_model=cfg.GEMINI_OCR_MODEL,
+                            llm_model=cfg.JUDGE_MODEL,
+                            source_file_path=file_path
+                        )
 
                     # C. Datei in Archiv verschieben
                     safe_move_file(file_path, cfg.FOLDERS["ARCHIVE"])
@@ -279,8 +353,19 @@ def main():
                     # 3. Sonstige Fehler (Leeres JSON, Bad Request 400, Parse Error) -> QUARANTÄNE
                     logger.warning(f"Fehler bei der Verarbeitung von {filename}: {error_msg}")
 
-                     # Auch im Fehlerfall Trace Daten speichern 
+                     # Auch im Fehlerfall Trace Daten speichern (Dateien - deprecated)
                     save_process_trace(filename, result, reasoning_model_name=cfg.GEMINI_OCR_MODEL)
+                    
+                    # Trace in Datenbank speichern (auch bei Fehler)
+                    if TRACE_DB_ENABLED:
+                        save_trace(
+                            filename=filename,
+                            result_data=result,
+                            pipeline_mode="Direct JSON",
+                            ocr_model=cfg.GEMINI_OCR_MODEL,
+                            llm_model=cfg.JUDGE_MODEL,
+                            source_file_path=file_path
+                        )
 
                     # Verschieben nach Error Quarantine
                     safe_move_file(file_path, cfg.FOLDERS["ERROR"])

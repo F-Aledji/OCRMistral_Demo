@@ -1,0 +1,18 @@
+# Backend für OCR Document Review PoC
+
+# Framework
+fastapi
+uvicorn[standard]
+
+# Datenbank
+sqlmodel
+alembic
+
+# Datei-Upload
+python-multipart
+
+# PDF Verarbeitung (für Annotated PDF)
+PyMuPDF
+
+# Environment
+python-dotenv

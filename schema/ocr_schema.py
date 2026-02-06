@@ -188,11 +188,29 @@ DiscountType = Annotated[
 
 # 3. --- Modelle ---
 
+# --- Bounding Box für Position im PDF ---
+class BoundingBox(BaseModel):
+    """
+    Speichert WO im PDF ein Wert gefunden wurde.
+    Die Koordinaten sind in PDF-Punkten (1 Punkt = 1/72 Zoll).
+    
+    Beispiel: Wenn das Datum "15.01.2026" an Position (100, 200) steht
+    und 80 Punkte breit und 12 Punkte hoch ist:
+    - x0=100, y0=200 (oben links)
+    - x1=180, y1=212 (unten rechts)
+    """
+    page: int = Field(default=0, description="Seitennummer im PDF (0 = erste Seite)")
+    x0: float = Field(description="Linke Kante des Rechtecks")
+    y0: float = Field(description="Obere Kante des Rechtecks")
+    x1: float = Field(description="Rechte Kante des Rechtecks")
+    y1: float = Field(description="Untere Kante des Rechtecks")
+
 class Currency(BaseModel):
     isoCode: CurrencyType = Field(default="EUR", description="ISO Währungscode, z.B. 'EUR' für Euro.")
 
 class GrossPrice(BaseModel):
     amount: MoneyType = Field(description="Der Brutto-Listenpreis pro Einheit vor Abzug von Rabatten. Falls im Dokument nur ein bereits rabattierter Netto-Einzelpreis steht, nimm diesen als Basiswert.")
+    amount_bbox: Optional[BoundingBox] = Field(default=None, description="Position des Preises im PDF")
     currency: Currency = Field(alias="Currency")
 
 class DeliveryDate(BaseModel):
@@ -207,6 +225,7 @@ class Uom(BaseModel):
 
 class TotalQuantity(BaseModel):
     amount: QuantityType = Field(description="Die extrahierte Menge der Artikel pro Position")
+    amount_bbox: Optional[BoundingBox] = Field(default=None, description="Position der Menge im PDF")
     uom: Uom = Field(alias="Uom") 
 
 class Details(BaseModel):
@@ -219,8 +238,10 @@ class Details(BaseModel):
 
     # ---- Für Mathe Check ----
     lineTotalAmount: MoneyType = Field(description="Der finale Netto-Gesamtbetrag der Zeile. WICHTIG: Dies ist der Wert nach Abzug aller Rabatte (Menge * Einzelpreis - Rabatt). Dieser Wert wird für den Summen-Check im Footer verwendet.")
+    lineTotalAmount_bbox: Optional[BoundingBox] = Field(default=None, description="Position des Zeilenbetrags im PDF")
     math_status: str = Field(default="OK", description="Status der rechnerischen Prüfung")
     discount: DiscountType = Field(default={'is_percent': False, 'value': 0.0}, description="Der gewährte Rabatt auf die Position. Kann als Prozentsatz (z. B. '15%') oder als Absolutbetrag extrahiert werden. Falls kein Rabatt explizit ausgewiesen ist, setze 0.")
+    discount_bbox: Optional[BoundingBox] = Field(default=None, description="Position des Rabatts im PDF")
 
     @model_validator(mode='after')
     def fix_position_number(self):
@@ -271,20 +292,25 @@ class Details(BaseModel):
 class Date(BaseModel):
     #Datetype parsed das Datum
     value: DateType = Field(description="Belegdatum im Format dd.mm.yyyy")
+    bbox: Optional[BoundingBox] = Field(default=None, description="Position des Datums im PDF")
 
 class SupplierConfirmationData(BaseModel):
     salesConfirmation : str = Field(default="Nicht gefunden", description="Fremdreferenznummer der Auftragsbestätigung, falls vorhanden. Nicht mit unserer BA-Nummer verwechseln!")
+    salesConfirmation_bbox: Optional[BoundingBox] = Field(default=None, description="Position der Fremdreferenznummer im PDF")
     date: Date
     documentType: str = Field(default="Auftragsbestätigung", description="Erkannter Typ (AB, Rechnung, Storno, Lieferschein)")
+    documentType_bbox: Optional[BoundingBox] = Field(default=None, description="Position des Dokumenttyps im PDF")
 
 class SupplierPartner(BaseModel):
     number : CleanIntType = Field(default=0,description="Lieferantennummer des Lieferanten. Oft wird die unsere interne Nummer des Lieferanten im Dokumenten angegeben versuche es zu extrahieren")
+    number_bbox: Optional[BoundingBox] = Field(default=None, description="Position der Lieferantennummer im PDF")
 
 class InvoiceSupplierData(BaseModel):
     supplierPartner : SupplierPartner = Field(alias="SupplierPartner")
 
 class Correspondence(BaseModel):
     number: BAType = Field(default="Nicht gefunden", description="Beschaffungsauftragsnummer (BA-Nummer). Sehr wichtig bitte angeben ohne Präfix davor")
+    bbox: Optional[BoundingBox] = Field(default=None, description="Position der BA-Nummer im PDF")
 
 class Type(BaseModel):
     code : str = Field(default="100", description ="Präfix der Beschaffungsauftragsnummer. Wenn du unsicher bist auf '100' setzen.")
@@ -313,6 +339,7 @@ class SupplierConfirmation(BaseModel):
     
     # Für Scoring und Validierung
     documentNetTotal: MoneyType = Field(description="Die finale Netto-Gesamtsumme aller Positionen laut Beleg-Footer. Dieser Wert muss der Summe aller lineTotalAmounts entsprechen.")
+    documentNetTotal_bbox: Optional[BoundingBox] = Field(default=None, description="Position der Gesamtsumme im PDF")
     date_plausibility_status: str = Field(default="OK", description="Status der Plausibilitätsprüfung")
     sum_validation_status: str = Field(default="OK", description="Status der Summenprüfung")
     doctype_status: str = Field(default="OK", description="Status der Dokumenttyp-Erkennung")

@@ -1,0 +1,17 @@
+{
+    "thresholds": {
+        "auto_process": 85
+    },
+    "penalties": {
+        "reasoning_missing": 5,
+        "missing_ba": 25,
+        "missing_date": 20,
+        "missing_items": 50,
+        "missing_net_total": 20,
+        "unknown_supplier": 15
+    },
+    "bonuses": {
+        "known_supplier": 10,
+        "template_match": 15
+    }
+}

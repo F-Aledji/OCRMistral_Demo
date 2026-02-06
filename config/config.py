@@ -20,9 +20,20 @@ GEMINI_CREDENTIALS = os.getenv("GEMINI_APPLICATION_CREDENTIALS", "")
 # config.py liegt in /config, also zwei Ebenen hoch für Root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Plattform-Erkennung für den Output-Pfad
+import platform
+if platform.system() == "Windows":
+    # Windows: Externer Transfer-Ordner
+    OUTPUT_PATH = r"J:\TRANSFER\RETARUS\Test\AIValidator\XML\Debug"
+else:
+    # Mac/Linux: Lokaler Ordner
+    OUTPUT_PATH = os.path.join(PROJECT_ROOT, "02_Output_XML")
+
+# WICHTIG: Das Backend nutzt jetzt eigene Pfade (backend/data/).
+# Diese FOLDERS sind nur noch für den batch_runner.py relevant.
 FOLDERS = {
     "INPUT": os.path.join(PROJECT_ROOT, "01_Input_PDF"),
-    "OUTPUT": r"J:\\TRANSFER\\RETARUS\\Test\\AIValidator\\XML\\Debug",
+    "OUTPUT": OUTPUT_PATH,
     "TRACE": os.path.join(PROJECT_ROOT, "03_Process_Trace"),
     "ERROR": os.path.join(PROJECT_ROOT, "98_Error_Quarantine"),
     "ARCHIVE": os.path.join(PROJECT_ROOT, "99_Archive_Success")

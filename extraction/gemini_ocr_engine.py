@@ -53,13 +53,13 @@ class GeminiOCR(BaseOCR):
             logger.error(f"Fehler bei der Konfiguration: {e}")
             raise RuntimeError(f"Google Gen AI Client konnte nicht initialisiert werden: {e}")
 
-    def process_pdf(self, file_bytes, stream=False, json_schema=None):
-        return self._process_content(file_bytes, "application/pdf", stream, json_schema)
+    def process_pdf(self, file_bytes, stream=False, json_schema=None, hints=None):
+        return self._process_content(file_bytes, "application/pdf", stream, json_schema, hints)
 
-    def process_image(self, file_bytes, stream=False, json_schema=None):
-        return self._process_content(file_bytes, "image/jpeg", stream, json_schema)
+    def process_image(self, file_bytes, stream=False, json_schema=None, hints=None):
+        return self._process_content(file_bytes, "image/jpeg", stream, json_schema, hints)
 
-    def _process_content(self, file_bytes, mime_type, stream=False, json_schema=None):
+    def _process_content(self, file_bytes, mime_type, stream=False, json_schema=None, hints=None):
         """Interner interner Helfer zur Verarbeitung von Inhalten mit optionaler JSON-Durchsetzung"""
         
         # Config Setup
@@ -83,7 +83,7 @@ class GeminiOCR(BaseOCR):
         response = method(
             model=self.model_name,
             contents=[
-                USER_PROMPT,
+                USER_PROMPT + (f"\n\nHINWEIS (Layout-Daten): {json.dumps(hints, indent=2)}" if hints else ""),
                 types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
             ],
             config=config_args

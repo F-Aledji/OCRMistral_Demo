@@ -1,5 +1,5 @@
 .venv
-.env
+.env*
 supplier_schema_generated*
 ocr-pipeline-weinmannschanz*.json
 _quarantine/
