@@ -31,7 +31,7 @@ FOLDERS = {
 # === Modelle ===
 GEMINI_OCR_MODEL = "gemini-3-flash-preview"
 #GEMINI_OCR_MODEL = "gemini-3-pro-flash"
-GEMINI_LLM_MODEL = "gemini-3-pro-preview"
+GEMINI_LLM_MODEL = "gemini-3-flash-preview"
 OPENAI_MODEL = "gpt-5.1"
 # MISTRAL_OCR_MODEL = "mistral-ocr-latest"
 

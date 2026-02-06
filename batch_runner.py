@@ -160,14 +160,15 @@ def safe_move_file(src_path, dest_folder):
             return
         except PermissionError:
             if attempt < max_retries - 1:
-                logger.warning(f"Datei {filename} ist gesperrt. Warte 2s... (Versuch {attempt+1}/{max_retries})")
-                time.sleep(2)
+                logger.warning(f"Datei {filename} ist gesperrt. Warte 6s... (Versuch {attempt+1}/{max_retries})")
+                time.sleep(6)
             else:
                 logger.error(f"Konnte Datei nicht verschieben (Zugriff verweigert): {filename}")
                 # Wir lassen sie im Input liegen, damit sie nicht verloren geht, aber loggen den Fehler.
         except Exception as e:
             logger.error(f"Kritischer Fehler beim Verschieben von {filename}: {e}")
             return
+
 
 def main():
     """Hauptfunktion des Batch Runners. Startet die Überwachung und Verarbeitung."""

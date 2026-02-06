@@ -11,7 +11,7 @@ import config.config as cfg
 logger = logging.getLogger(__name__)
 
 # Einfacher Prompt - bleibt inline
-SYSTEM_INSTRUCTIONS = "Du bist ein Markdown zu JSON parser. Du erhältst Markdown-Text und eine JSON-Schema Definition. Deine Aufgabe ist es, die relevanten Daten aus dem Markdown basierend des Schemas zu extrahieren und sie in einem validen JSON-Format zurückzugeben."
+SYSTEM_INSTRUCTIONS = ""
 
 class GeminiLLM(BaseLLM):
     def __init__(self, project_root: str):
@@ -31,23 +31,18 @@ class GeminiLLM(BaseLLM):
                 project=self.project_id, 
                 location=self.location
             )
-             logger.info(f"Gemini LLM Client erfolgreich konfiguriert für Projekt '{self.project_id}'.")
+             logger.info(f"Gemini Flash Client erfolgreich konfiguriert für Projekt '{self.project_id}'.")
         except Exception as e:
-             logger.error(f"Gemini Client Init Error: {e}")
-             raise RuntimeError(f"Gemini LLM Client konnte nicht initialisiert werden: {e}")
+             logger.error(f"Gemini Flash Client Init Error: {e}")
+             raise RuntimeError(f"Gemini Flash Client konnte nicht initialisiert werden: {e}")
 
-    def get_json_extraction(self, markdown_text: str, extraction_schema: Dict[str, Any]) -> Dict[str, Any]:
-        """Ruft Gemini API auf um strukturierte JSON-Daten aus Markdown zu extrahieren."""
+    def get_json_extraction(self, coordinates,  extraction_schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Ruft Gemini API auf um aus eingezeichnete Koordinaten Daten zu extrahieren."""
         if not self.client:
-            logger.warning("Gemini Client not initialized.")
+            logger.warning("Gemini Flash Client not initialized.")
             return {}
 
-        prompt = f"""
-        Extract data from the following markdown text based on the provided schema.
-        
-        Markdown Text:
-        {markdown_text}
-        """
+        prompt = "" # Hier der Prompt um die Koordinaten zu verarbeiten und die Daten zu speichern
 
         try:
             response = self.client.models.generate_content(
@@ -66,5 +61,5 @@ class GeminiLLM(BaseLLM):
                 return json.loads(response.text)
             return {}
         except Exception as e:
-             print(f"Gemini LLM Error: {e}")
+             print(f"Gemini Flash Client Error: {e}")
              return {}

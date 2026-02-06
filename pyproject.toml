@@ -1,7 +1,7 @@
 [project]
 name = "ocr-pipeline"
 version = "1.0.0"
-description = "OCR Pipeline für Auftragsbestätigungen (Gemini/Mistral)"
+description = "OCR Pipeline für Auftragsbestätigungen (Gemini)"
 requires-python = ">=3.10"
 dependencies = [
     "streamlit>=1.52.0",
