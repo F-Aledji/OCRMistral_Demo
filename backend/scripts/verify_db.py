@@ -4,6 +4,15 @@ Verifizierungs-Skript für Datenbank-Verbesserungen.
 Testet die neuen Features: Auto-Update, Cascade Delete, Indizes.
 """
 
+
+import sys
+import os
+
+# Backend Root zum Pfad hinzufügen (zwei Ebenen hoch)
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+    
 from sqlmodel import SQLModel, create_engine, Session, select
 from sqlalchemy import text
 from app.db_models import Document, DocumentFile, Annotation, DocumentStatus, FileKind

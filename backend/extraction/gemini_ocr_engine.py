@@ -9,12 +9,12 @@ from dotenv import load_dotenv
 # Support both: running from project root (backend.X) and from backend dir (X)
 try:
     from backend.extraction.base_ocr import BaseOCR
-    from backend.utils.schema_utils import clean_json_schema
-    from backend.utils.prompt_loader import load_prompt
+    from backend.config.schema_utils import clean_json_schema
+    from backend.config.prompt_loader import load_prompt
 except ImportError:
     from extraction.base_ocr import BaseOCR
-    from utils.schema_utils import clean_json_schema
-    from utils.prompt_loader import load_prompt
+    from config.schema_utils import clean_json_schema
+    from config.prompt_loader import load_prompt
 
 load_dotenv()
 

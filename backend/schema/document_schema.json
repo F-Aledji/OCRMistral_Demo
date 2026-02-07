@@ -1,0 +1,522 @@
+{
+  "$defs": {
+    "BoundingBox": {
+      "description": "Speichert WO im PDF ein Wert gefunden wurde.\nDie Koordinaten sind in PDF-Punkten (1 Punkt = 1/72 Zoll).\n\nBeispiel: Wenn das Datum \"15.01.2026\" an Position (100, 200) steht\nund 80 Punkte breit und 12 Punkte hoch ist:\n- x0=100, y0=200 (oben links)\n- x1=180, y1=212 (unten rechts)",
+      "properties": {
+        "page": {
+          "default": 0,
+          "description": "Seitennummer im PDF (0 = erste Seite)",
+          "title": "Page",
+          "type": "integer"
+        },
+        "x0": {
+          "description": "Linke Kante des Rechtecks",
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "description": "Obere Kante des Rechtecks",
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "description": "Rechte Kante des Rechtecks",
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "description": "Untere Kante des Rechtecks",
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "Correspondence": {
+      "properties": {
+        "number": {
+          "default": "Nicht gefunden",
+          "description": "Beschaffungsauftragsnummer (BA-Nummer). Sehr wichtig bitte angeben ohne Präfix davor",
+          "title": "Number",
+          "type": "string"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position der BA-Nummer im PDF"
+        }
+      },
+      "title": "Correspondence",
+      "type": "object"
+    },
+    "CorrespondenceDetail": {
+      "properties": {
+        "number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        }
+      },
+      "title": "CorrespondenceDetail",
+      "type": "object"
+    },
+    "Currency": {
+      "properties": {
+        "isoCode": {
+          "default": "EUR",
+          "description": "ISO Währungscode, z.B. 'EUR' für Euro.",
+          "title": "Isocode",
+          "type": "string"
+        }
+      },
+      "title": "Currency",
+      "type": "object"
+    },
+    "Date": {
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Belegdatum im Format dd.mm.yyyy",
+          "title": "Value"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position des Datums im PDF"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "Date",
+      "type": "object"
+    },
+    "DeliveryDate": {
+      "properties": {
+        "specialValue": {
+          "default": "NONE",
+          "description": "Spezialwert für das Lieferdatum. Immer 'NONE' setzen.",
+          "title": "Specialvalue",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Liefertermin falls im Dokument vorhanden.",
+          "title": "Date"
+        }
+      },
+      "title": "DeliveryDate",
+      "type": "object"
+    },
+    "Details": {
+      "properties": {
+        "sequence": {
+          "default": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "number": {
+          "description": "Die Positionsnummer der Zeile im Dokument.",
+          "title": "Number",
+          "type": "integer"
+        },
+        "totalQuantity": {
+          "$ref": "#/$defs/TotalQuantity"
+        },
+        "deliveryDate": {
+          "$ref": "#/$defs/DeliveryDate"
+        },
+        "grossPrice": {
+          "$ref": "#/$defs/GrossPrice"
+        },
+        "CorrespondenceDetail": {
+          "$ref": "#/$defs/CorrespondenceDetail"
+        },
+        "lineTotalAmount": {
+          "description": "Der finale Netto-Gesamtbetrag der Zeile. WICHTIG: Dies ist der Wert nach Abzug aller Rabatte (Menge * Einzelpreis - Rabatt). Dieser Wert wird für den Summen-Check im Footer verwendet.",
+          "title": "Linetotalamount",
+          "type": "number"
+        },
+        "lineTotalAmount_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position des Zeilenbetrags im PDF"
+        },
+        "math_status": {
+          "default": "OK",
+          "description": "Status der rechnerischen Prüfung",
+          "title": "Math Status",
+          "type": "string"
+        },
+        "discount": {
+          "additionalProperties": true,
+          "default": {
+            "is_percent": false,
+            "value": 0.0
+          },
+          "description": "Der gewährte Rabatt auf die Position. Kann als Prozentsatz (z. B. '15%') oder als Absolutbetrag extrahiert werden. Falls kein Rabatt explizit ausgewiesen ist, setze 0.",
+          "title": "Discount",
+          "type": "object"
+        },
+        "discount_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position des Rabatts im PDF"
+        }
+      },
+      "required": [
+        "number",
+        "totalQuantity",
+        "deliveryDate",
+        "grossPrice",
+        "CorrespondenceDetail",
+        "lineTotalAmount"
+      ],
+      "title": "Details",
+      "type": "object"
+    },
+    "DocumentItem": {
+      "properties": {
+        "SupplierConfirmation": {
+          "$ref": "#/$defs/SupplierConfirmation",
+          "description": "Eine extrahierte Auftragsbestätigung basierend der BA-Nummer (Beschaffungsauftragsnummer)."
+        }
+      },
+      "required": [
+        "SupplierConfirmation"
+      ],
+      "title": "DocumentItem",
+      "type": "object"
+    },
+    "GrossPrice": {
+      "properties": {
+        "amount": {
+          "description": "Der Brutto-Listenpreis pro Einheit vor Abzug von Rabatten. Falls im Dokument nur ein bereits rabattierter Netto-Einzelpreis steht, nimm diesen als Basiswert.",
+          "title": "Amount",
+          "type": "number"
+        },
+        "amount_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position des Preises im PDF"
+        },
+        "Currency": {
+          "$ref": "#/$defs/Currency"
+        }
+      },
+      "required": [
+        "amount",
+        "Currency"
+      ],
+      "title": "GrossPrice",
+      "type": "object"
+    },
+    "InvoiceSupplierData": {
+      "properties": {
+        "SupplierPartner": {
+          "$ref": "#/$defs/SupplierPartner"
+        }
+      },
+      "required": [
+        "SupplierPartner"
+      ],
+      "title": "InvoiceSupplierData",
+      "type": "object"
+    },
+    "InvoicingData": {
+      "properties": {
+        "PaymentTerms": {
+          "default": null,
+          "description": "Die Zahlungsbedinungen kann aber gerne leer bleiben.",
+          "title": "Paymentterms",
+          "type": "string"
+        }
+      },
+      "title": "InvoicingData",
+      "type": "object"
+    },
+    "SupplierConfirmation": {
+      "properties": {
+        "reasoning": {
+          "description": "WICHTIG: Nutze dieses Feld als Schmierblatt! 1. Prüfe den Dokumententyp (AB, Rechnung, etc.). 2. Suche BA- und AB-Nummer. 3. Berechne pro Zeile: (GrossPrice.amount - Rabatt) * Menge. Stimmt das mit lineTotalAmount überein? 4. Addiere alle lineTotalAmounts und vergleiche mit documentNetTotal. 5. Notiere Unstimmigkeiten und begründe deine Entscheidungen.",
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "supplierConfirmationData": {
+          "$ref": "#/$defs/SupplierConfirmationData"
+        },
+        "invoiceSupplierData": {
+          "$ref": "#/$defs/InvoiceSupplierData"
+        },
+        "invoicingData": {
+          "$ref": "#/$defs/InvoicingData"
+        },
+        "Correspondence": {
+          "$ref": "#/$defs/Correspondence"
+        },
+        "Type": {
+          "$ref": "#/$defs/Type"
+        },
+        "Details": {
+          "items": {
+            "$ref": "#/$defs/Details"
+          },
+          "title": "Details",
+          "type": "array"
+        },
+        "documentNetTotal": {
+          "description": "Die finale Netto-Gesamtsumme aller Positionen laut Beleg-Footer. Dieser Wert muss der Summe aller lineTotalAmounts entsprechen.",
+          "title": "Documentnettotal",
+          "type": "number"
+        },
+        "documentNetTotal_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position der Gesamtsumme im PDF"
+        },
+        "date_plausibility_status": {
+          "default": "OK",
+          "description": "Status der Plausibilitätsprüfung",
+          "title": "Date Plausibility Status",
+          "type": "string"
+        },
+        "sum_validation_status": {
+          "default": "OK",
+          "description": "Status der Summenprüfung",
+          "title": "Sum Validation Status",
+          "type": "string"
+        },
+        "doctype_status": {
+          "default": "OK",
+          "description": "Status der Dokumenttyp-Erkennung",
+          "title": "Doctype Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reasoning",
+        "supplierConfirmationData",
+        "invoiceSupplierData",
+        "invoicingData",
+        "Correspondence",
+        "Type",
+        "Details",
+        "documentNetTotal"
+      ],
+      "title": "SupplierConfirmation",
+      "type": "object"
+    },
+    "SupplierConfirmationData": {
+      "properties": {
+        "salesConfirmation": {
+          "default": "Nicht gefunden",
+          "description": "Fremdreferenznummer der Auftragsbestätigung, falls vorhanden. Nicht mit unserer BA-Nummer verwechseln!",
+          "title": "Salesconfirmation",
+          "type": "string"
+        },
+        "salesConfirmation_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position der Fremdreferenznummer im PDF"
+        },
+        "date": {
+          "$ref": "#/$defs/Date"
+        },
+        "documentType": {
+          "default": "Auftragsbestätigung",
+          "description": "Erkannter Typ (AB, Rechnung, Storno, Lieferschein)",
+          "title": "Documenttype",
+          "type": "string"
+        },
+        "documentType_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position des Dokumenttyps im PDF"
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "title": "SupplierConfirmationData",
+      "type": "object"
+    },
+    "SupplierPartner": {
+      "properties": {
+        "number": {
+          "default": 0,
+          "description": "Lieferantennummer des Lieferanten. Oft wird die unsere interne Nummer des Lieferanten im Dokumenten angegeben versuche es zu extrahieren",
+          "title": "Number",
+          "type": "integer"
+        },
+        "number_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position der Lieferantennummer im PDF"
+        }
+      },
+      "title": "SupplierPartner",
+      "type": "object"
+    },
+    "TotalQuantity": {
+      "properties": {
+        "amount": {
+          "description": "Die extrahierte Menge der Artikel pro Position",
+          "title": "Amount",
+          "type": "integer"
+        },
+        "amount_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Position der Menge im PDF"
+        },
+        "Uom": {
+          "$ref": "#/$defs/Uom"
+        }
+      },
+      "required": [
+        "amount",
+        "Uom"
+      ],
+      "title": "TotalQuantity",
+      "type": "object"
+    },
+    "Type": {
+      "properties": {
+        "code": {
+          "default": "100",
+          "description": "Präfix der Beschaffungsauftragsnummer. Wenn du unsicher bist auf '100' setzen.",
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "title": "Type",
+      "type": "object"
+    },
+    "Uom": {
+      "properties": {
+        "code": {
+          "default": "Stk",
+          "description": "Mengeneinheit. Setze diesen Wert immer auf 'Stk'.",
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "title": "Uom",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "documents": {
+      "description": "Eine Liste aller erkannten Auftragsbestätigungen im Dokument.",
+      "items": {
+        "$ref": "#/$defs/DocumentItem"
+      },
+      "title": "Documents",
+      "type": "array"
+    }
+  },
+  "required": [
+    "documents"
+  ],
+  "title": "Document",
+  "type": "object"
+}

@@ -54,13 +54,13 @@ logger = logging.getLogger(__name__)
 # DB-Abhängigkeiten optional laden
 try:
     from backend.app.db import engine
-    from backend.app.db_models import ValidBANumber, SupplierTemplate
+    from backend.app.db_models import ValidBANumber, SupplierTemplate, Supplier
     from backend.app.services.prescan import get_prescan_service
     DB_AVAILABLE = True
 except ImportError:
     try:
         from app.db import engine
-        from app.db_models import ValidBANumber, SupplierTemplate
+        from app.db_models import ValidBANumber, SupplierTemplate, Supplier
         from app.services.prescan import get_prescan_service
         DB_AVAILABLE = True
     except ImportError:
@@ -213,23 +213,28 @@ class UnifiedPipeline:
             # sa_session verwenden wir nicht direkt da wir nicht in FastAPI Context sind
             # Wir erstellen kurzlebige Session für den Lookup
             with Session(engine) as session:
-                # 1. BA Nummer suchen
+                # 1. BA Nummer suchen (liefert ERP-ID als String)
                 statement = select(ValidBANumber).where(ValidBANumber.ba_number == ba_number)
-                result = session.exec(statement).first()
+                valid_ba = session.exec(statement).first()
                 
-                if not result:
+                if not valid_ba:
                     return False, None
                 
-                # Wenn gefunden:
-                supplier_id = result.supplier_id
+                # 2. Supplier suchen (via ERP-ID)
+                supplier_erp_code = valid_ba.supplier_id
+                supplier_stmt = select(Supplier).where(Supplier.supplier_code == supplier_erp_code)
+                supplier = session.exec(supplier_stmt).first()
+
+                if not supplier:
+                   # Wir kennen die BA-Nummer, aber haben keinen Supplier-Eintrag -> Kein Template
+                   return True, None
                 
-                # 2. Template suchen
-                tmpl_statement = select(SupplierTemplate).where(SupplierTemplate.supplier_id == supplier_id)
-                tmpl_result = session.exec(tmpl_statement).first()
+                # 3. Template via Relationship
+                tmpl_result = supplier.template
                 
                 coords = tmpl_result.coordinates_json if tmpl_result else None
                 
-                logger.info(f"DB Match: BA={ba_number} -> Supplier={result.supplier_name} (Template Found={coords is not None})")
+                logger.info(f"DB Match: BA={ba_number} -> Supplier={supplier.name} (Template Found={coords is not None})")
                 return True, coords
                 
         except Exception as e:
@@ -282,7 +287,7 @@ class UnifiedPipeline:
     
     def _load_json_schema(self) -> Optional[Dict]:
         """Lädt das JSON-Schema für Gemini Structured Output."""
-        schema_path = os.path.join(PROJECT_ROOT, "schema", "schema.json")
+        schema_path = os.path.join(BACKEND_ROOT, "schema", "document_schema.json")
         try:
             with open(schema_path, "r", encoding="utf-8") as f:
                 return json.load(f)

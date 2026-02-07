@@ -104,6 +104,10 @@ class Document(SQLModel, table=True):
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
+    # Verknüpfung zum Lieferanten (neu)
+    supplier_id: Optional[uuid.UUID] = Field(default=None, foreign_key="suppliers.id", description="Verknüpfter Lieferant")
+    supplier: Optional["Supplier"] = Relationship(back_populates="documents")
+
 
 # -----------------------------------------------------------------------------
 # TABELLE: document_files
@@ -186,6 +190,31 @@ class Annotation(SQLModel, table=True):
 # -----------------------------------------------------------------------------
 # TABELLE: valid_ba_numbers (Simulation Produktive DB)
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# TABELLE: suppliers (Neu: Stammdaten)
+# -----------------------------------------------------------------------------
+class Supplier(SQLModel, table=True):
+    """
+    Stammdaten: Lieferanten.
+    Hier werden die Lieferanten verwaltet, um Templates zuzuordnen.
+    """
+    __tablename__ = "suppliers"
+    
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(index=True, description="Name des Lieferanten")
+    supplier_code: str = Field(index=True, unique=True, description="ERP-Nummer (z.B. 7000123)")
+    
+    # Kontakt / Info (Erweiterbar)
+    contact_email: Optional[str] = Field(default=None)
+    
+    # Beziehungen
+    template: Optional["SupplierTemplate"] = Relationship(back_populates="supplier")
+    documents: List["Document"] = Relationship(back_populates="supplier")
+
+# -----------------------------------------------------------------------------
+# TABELLE: valid_ba_numbers (Simulation Produktive DB)
+# -----------------------------------------------------------------------------
 class ValidBANumber(SQLModel, table=True):
     """
     Simulation der produktiven Datenbank.
@@ -209,8 +238,13 @@ class SupplierTemplate(SQLModel, table=True):
     __tablename__ = "supplier_templates"
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    supplier_id: str = Field(index=True, unique=True) # 1 Template pro Lieferant (vorerst)
+    
+    # Änderung: Jetzt Verknüpfung zur Supplier-Tabelle via UUID
+    supplier_id: uuid.UUID = Field(foreign_key="suppliers.id", unique=True)
     
     # JSON mit Koordinaten für Header, Footer, Table
     # Bsp: {"header_bbox": [0, 0, 100, 50], ...}
     coordinates_json: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
+
+    # Beziehung
+    supplier: "Supplier" = Relationship(back_populates="template")

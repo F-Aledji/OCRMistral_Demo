@@ -11,8 +11,8 @@
 import os
 import sys
 
-# Backend zu sys.path hinzufügen
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+# Backend zu sys.path hinzufügen (eine Ebene hoch von "core")
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 

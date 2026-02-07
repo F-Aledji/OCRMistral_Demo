@@ -29,7 +29,7 @@ Die Pipeline ist das Herzstück der Anwendung. Sie wird durch die Klasse `Unifie
    - **Warum?** Wenn wir die BA-Nummer früh finden, können wir in der Datenbank nachsehen, ob wir diesen Lieferanten schon kennen und spezielle "Schablonen" (Templates) für ihn haben. Das verbessert die spätere Erkennung enorm.
 
 3. **OCR & Extraktion (Das Lesen)**
-   - **Was passiert?** Das Dokument wird an eine Hochleistungs-KI (aktuell Google Gemini 2.0 Flash) gesendet. Diese KI "liest" das Dokument und extrahiert alle relevanten Daten (Kopfdaten, Positionen, Summen) direkt in ein strukturiertes JSON-Format.
+   - **Was passiert?** Das Dokument wird an eine Hochleistungs-KI (aktuell Google Gemini 3.0 Flash) gesendet. Diese KI "liest" das Dokument und extrahiert alle relevanten Daten (Kopfdaten, Positionen, Summen) direkt in ein strukturiertes JSON-Format.
    - **Technik:** Nutzung von multimodalen LLMs (Large Language Models), die Text und Bild gleichzeitig verstehen.
 
 4. **Validierung (Die Prüfung)**
@@ -71,7 +71,7 @@ Diese Tabellen steuern, was Sie aktuell auf dem Bildschirm sehen.
 
 | Tabelle | Beschreibung |
 | :--- | :--- |
-| **`documents`** | Die Haupttabelle. Ein Eintrag pro hochgeladener PDF. Enthält Status (`NEW`, `OCR_DONE`, `ERROR`), Dateinamen und wer es gerade bearbeitet (`claimed_by`). |
+| **`documents`** | Die Haupttabelle. Ein Eintrag pro hochgeladener PDF. Enthält Status (`NEW`, `OCR_DONE`, `ERROR`), Dateinamen, wer es gerade bearbeitet (`claimed_by`) und optional den verknüpften Lieferanten (`supplier_id`). |
 | **`document_files`** | Verknüpft den Datenbank-Eintrag mit den echten Dateien auf der Festplatte (Original-PDF, XML). |
 | **`annotations`** | Speichert die Ergebnisse der KI (wo steht was?) und Änderungen, die der Benutzer im Editor vornimmt. Jedes Speichern legt eine neue Version an (Historie). |
 
@@ -85,11 +85,12 @@ Diese Tabellen speichern detaillierte Protokolle für jedes verarbeitete Dokumen
 | **`score_penalty`** | Die "Sündenkartei". Hier wird genau gespeichert, *warum* Punkte abgezogen wurden (z.B. "-20 Punkte: Datum fehlt"). Das erlaubt Analysen wie "Welcher Fehler tritt am häufigsten auf?". |
 | **`score_signal`** | Positive Signale (z.B. "Lieferant erkannt"). |
 
-### C. Stammdaten (Simulation)
+### C. Stammdaten & Konfiguration
 | Tabelle | Beschreibung |
 | :--- | :--- |
-| **`valid_ba_numbers`** | Simuliert die ERP-Datenbank. Hier stehen alle gültigen Bestellnummern, gegen die wir prüfen. |
-| **`supplier_templates`** | Speichert "Schablonen" (Koordinaten) für bekannte Lieferanten, um der KI zu helfen, Daten an der richtigen Stelle zu suchen. |
+| **`suppliers`** | **(Neu)** Zentrale Verwaltung der Lieferanten. Speichert Name, ERP-ID und verknüpft Templates. |
+| **`valid_ba_numbers`** | Simuliert die ERP-Datenbank. Verknüpft BA-Nummern mit der ERP-ID des Lieferanten. |
+| **`supplier_templates`** | Speichert "Schablonen" (Koordinaten) für Lieferanten. Ist direkt mit der Tabelle `suppliers` verknüpft. |
 
 ---
 

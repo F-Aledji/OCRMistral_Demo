@@ -7,11 +7,11 @@ from google.genai import types
 
 try:
     from backend.llm.base_llm import BaseLLM
-    from backend.utils.schema_utils import clean_json_schema
+    from backend.config.schema_utils import clean_json_schema
     from backend.config import config as cfg
 except ImportError:
     from llm.base_llm import BaseLLM
-    from utils.schema_utils import clean_json_schema
+    from config.schema_utils import clean_json_schema
     from config import config as cfg
 
 logger = logging.getLogger(__name__)

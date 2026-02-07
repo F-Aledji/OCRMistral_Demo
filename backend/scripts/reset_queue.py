@@ -3,9 +3,10 @@ import shutil
 import sqlite3
 import sys
 
-# Konfiguration
-DB_PATH = "backend/demo.db"
-DATA_DIR = "backend/data"
+# Konfiguration (relativ zu backend/scripts/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # backend/
+DB_PATH = os.path.join(BASE_DIR, "demo.db")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
 def list_documents(cursor):
     """Listet alle Dokumente auf."""

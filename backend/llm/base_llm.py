@@ -9,9 +9,10 @@ class BaseLLM(ABC):
         self.project_root = project_root
         self.env = Environment(loader=FileSystemLoader(project_root))
 
-    def get_extraction_schema(self):
-        """Lädt das JSON Schema aus schema.json im Projekt-Root"""
-        schema_path = os.path.join(self.project_root, 'schema', 'schema.json')
+        """Lädt das JSON Schema aus document_schema.json im Backend-Schema-Ordner"""
+        # Pfad: backend/llm/BaseLLM.py -> backend/schema/document_schema.json
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        schema_path = os.path.join(base_dir, 'schema', 'document_schema.json')
         with open(schema_path, 'r', encoding='utf-8') as f:
             return json.load(f)
 

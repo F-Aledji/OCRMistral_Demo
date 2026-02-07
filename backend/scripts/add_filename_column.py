@@ -1,7 +1,8 @@
 import sqlite3
 import os
 
-DB_PATH = "backend/demo.db"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "demo.db")
 
 def migrate():
     if not os.path.exists(DB_PATH):

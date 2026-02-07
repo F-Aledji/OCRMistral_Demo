@@ -9,7 +9,8 @@ from functools import lru_cache
 logger = logging.getLogger(__name__)
 
 # Basis-Pfad zum prompts-Ordner
-PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompts")
+# Basis-Pfad zum prompts-Ordner (jetzt lokal in config/prompts)
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
 
 
 @lru_cache(maxsize=10)

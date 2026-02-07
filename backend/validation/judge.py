@@ -14,7 +14,7 @@
 #
 # KONFIGURATION:
 # - JUDGE_PROVIDER: "Google" oder "OpenAI" (in config/config.py)
-# - JUDGE_MODEL: z.B. "gemini-2.0-flash" (in config/config.py)
+# - JUDGE_MODEL: z.B. "gemini-3.0-flash" (in config/config.py)
 #
 # WICHTIG:
 # Der Judge ist ein "zweiter Versuch" - er ist langsamer und teurer als die
@@ -30,12 +30,12 @@ from typing import List, Dict, Any, Optional
 
 try:
     from backend.config import config as cfg
-    from backend.utils.prompt_loader import load_prompt
-    from backend.utils.schema_utils import clean_json_schema
+    from backend.config.prompt_loader import load_prompt
+    from backend.config.schema_utils import clean_json_schema
 except ImportError:
     from config import config as cfg
-    from utils.prompt_loader import load_prompt
-    from utils.schema_utils import clean_json_schema
+    from config.prompt_loader import load_prompt
+    from config.schema_utils import clean_json_schema
 
 # -----------------------------------------------------------------------------
 # PROVIDER-VERFÜGBARKEIT PRÜFEN
@@ -99,7 +99,7 @@ class Judge:
         Das Schema definiert die erwartete Struktur der Antwort.
         Gemini nutzt dies für "Constrained Decoding" - garantiert valides JSON.
         """
-        schema_path = os.path.join(cfg.PROJECT_ROOT, "schema", "schema.json")
+        schema_path = os.path.join(cfg.BACKEND_ROOT, "schema", "document_schema.json")
         try:
             with open(schema_path, "r", encoding="utf-8") as f:
                 return json.load(f)
