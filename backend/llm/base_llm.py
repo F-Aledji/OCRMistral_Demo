@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import json
 import os
 from jinja2 import Environment, FileSystemLoader
-from validation.post_processing import generate_xml_from_data
+from backend.validation.post_processing import generate_xml_from_data
 
 class BaseLLM(ABC):
     def __init__(self, project_root):

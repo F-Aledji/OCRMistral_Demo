@@ -48,6 +48,11 @@ import json
 import logging
 from datetime import datetime
 
+
+import sys
+# Parent directory (project root) to sys.path so we can import 'backend'
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Config & Logging
 from backend.config import config as cfg
 
@@ -64,7 +69,7 @@ logger = cfg.setup_logging("BatchRunner")
 # Falls das Backend-Modul nicht verfügbar ist, läuft der Runner trotzdem.
 
 try:
-    from backend.trace import save_trace
+    from backend.core.trace_client import save_trace
     TRACE_DB_ENABLED = True
     logger.info("✓ Trace-Datenbank aktiviert")
 except ImportError as e:

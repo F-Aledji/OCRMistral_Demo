@@ -12,13 +12,13 @@ import os
 import sys
 
 # Backend zu sys.path hinzufügen (eine Ebene hoch von "core")
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+
+# Note: 'backend' package must be in sys.path (e.g. running from project root)
+
 
 # Datenbank initialisieren (Tabellen erstellen falls nötig)
-from app.db import create_db_and_tables, engine
-from app.services.trace_service import save_processing_run
+from backend.app.db import create_db_and_tables, engine
+from backend.app.services.trace_service import save_processing_run
 
 # Tabellen beim Import erstellen
 create_db_and_tables()

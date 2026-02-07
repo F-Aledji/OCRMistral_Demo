@@ -8,15 +8,15 @@ Testet die neuen Features: Auto-Update, Cascade Delete, Indizes.
 import sys
 import os
 
-# Backend Root zum Pfad hinzufügen (zwei Ebenen hoch)
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+# Backend Root zum Pfad hinzufügen (drei Ebenen hoch)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
     
 from sqlmodel import SQLModel, create_engine, Session, select
 from sqlalchemy import text
-from app.db_models import Document, DocumentFile, Annotation, DocumentStatus, FileKind
-from app.trace_models import ProcessingRun, ExtractedDocument, ScorePenalty, PenaltyCategory
+from backend.app.db_models import Document, DocumentFile, Annotation, DocumentStatus, FileKind
+from backend.app.trace_models import ProcessingRun, ExtractedDocument, ScorePenalty, PenaltyCategory
 import uuid
 from datetime import datetime
 import time

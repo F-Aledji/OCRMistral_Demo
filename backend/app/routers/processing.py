@@ -14,7 +14,7 @@ from ..db import get_session
 from ..db_models import Document, Annotation, DocumentStatus
 from ..services import storage
 from ..services.pipeline import get_pipeline_service
-from ..config import config as cfg
+from backend.config import config as cfg
 
 router = APIRouter(tags=["processing"])
 
