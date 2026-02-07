@@ -4,7 +4,6 @@
 // Diese Seite zeigt ein einzelnes Dokument mit PDF-Viewer und Annotations.
 // User können hier Felder markieren und Bounding Boxes speichern.
 // =============================================================================
-
 "use client"; //sagt dem System dass es sich um eine Client-Side Komponente handelt
 
 import { useEffect, useState, useCallback } from "react";
@@ -18,7 +17,6 @@ import {
     releaseDocument,
     getPdfUrl,
     Annotations,
-    FieldAnnotation,
     BoundingBox
 } from "@/lib/api";
 

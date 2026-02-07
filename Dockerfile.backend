@@ -1,0 +1,61 @@
+# =============================================================================
+# DOCKERFILE - BACKEND
+# =============================================================================
+# Multi-Stage Build für das Python FastAPI Backend
+# =============================================================================
+
+FROM python:3.11-slim AS base
+
+# Umgebungsvariablen
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# System-Dependencies für PyMuPDF
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmupdf-dev \
+    libfreetype6-dev \
+    libjpeg-dev \
+    libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Dependencies Stage
+# -----------------------------------------------------------------------------
+FROM base AS dependencies
+
+# Pip aktualisieren
+RUN pip install --upgrade pip
+
+# Requirements kopieren und installieren
+# Jetzt nur noch eine requirements.txt im Root nötig
+COPY requirements.txt ./requirements.txt
+COPY backend/requirements.txt ./backend-requirements.txt
+
+RUN pip install --no-cache-dir -r requirements.txt -r backend-requirements.txt
+
+# -----------------------------------------------------------------------------
+# Production Stage
+# -----------------------------------------------------------------------------
+FROM dependencies AS production
+
+# Backend-Verzeichnis kopieren (enthält jetzt alles)
+COPY backend/ ./backend/
+
+# Schema-Datei aus Root kopieren (falls noch extern referenziert)
+COPY schema/ ./schema/
+
+# Datenverzeichnis erstellen
+RUN mkdir -p /app/backend/data /app/backend/logs
+
+# Port freigeben
+EXPOSE 8000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
+
+# Start-Befehl - läuft vom Projekt-Root
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

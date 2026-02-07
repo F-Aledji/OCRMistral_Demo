@@ -1,5 +1,6 @@
 .venv
 .env*
+.env.example
 supplier_schema_generated*
 ocr-pipeline-weinmannschanz*.json
 _quarantine/
@@ -15,5 +16,4 @@ __pycache__/
 03_Process_Trace/
 98_Error_Quarantine/
 99_Archive_Success/
-tests/
 .pytests_cache/

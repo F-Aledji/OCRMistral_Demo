@@ -49,10 +49,10 @@ import logging
 from datetime import datetime
 
 # Config & Logging
-import config.config as cfg
+from backend.config import config as cfg
 
 # Unified Pipeline importieren (ersetzt PipelineController)
-from core.pipeline import UnifiedPipeline
+from backend.core import UnifiedPipeline
 
 # Logging Setup
 logger = cfg.setup_logging("BatchRunner")

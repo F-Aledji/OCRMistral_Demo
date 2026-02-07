@@ -6,18 +6,15 @@
 # - Singleton-Pattern für FastAPI
 # =============================================================================
 
-import os
-import sys
 import logging
 from typing import Dict, Any, Optional
 
-# Projekt-Root zu sys.path hinzufügen
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
 # Unified Pipeline importieren
-from core.pipeline import UnifiedPipeline, get_pipeline
+# Support both: running from project root (backend.core) and from backend dir (core)
+try:
+    from backend.core import UnifiedPipeline, get_pipeline
+except ImportError:
+    from core import UnifiedPipeline, get_pipeline
 
 # Lokale Imports für Koordinaten-Konvertierung
 from . import coordinates

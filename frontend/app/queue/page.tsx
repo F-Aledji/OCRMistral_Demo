@@ -8,7 +8,6 @@
 "use client";  // <-- WICHTIG: Sagt Next.js, dass dies eine Client-Komponente ist
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Document, getDocuments, uploadDocument, claimDocument, processDocument } from "@/lib/api";
 
 

@@ -41,6 +41,8 @@ def get_annotations(doc_id: UUID, session: Session = Depends(get_session)):
     if not doc:
         raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
 
+    # Neueste Annotation laden
+    query = select(Annotation).where(Annotation.document_id == doc_id).order_by(Annotation.version.desc())
     annotation = session.exec(query).first()
     
     if not annotation:

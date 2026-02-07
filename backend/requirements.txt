@@ -16,3 +16,6 @@ PyMuPDF
 
 # Environment
 python-dotenv
+
+# Testing / Template Rendering
+jinja2

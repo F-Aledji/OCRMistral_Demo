@@ -1,0 +1,68 @@
+# =============================================================================
+# DOCKER COMPOSE - OCR PIPELINE
+# =============================================================================
+# Startet Backend + Frontend zusammen
+# Usage: docker-compose up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # BACKEND (FastAPI)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ocr-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      # Google Cloud Credentials (aus Host-System)
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+    volumes:
+      # Persistente Daten
+      - ./backend/data:/app/backend/data
+      - ./backend/logs:/app/backend/logs
+      # GCP Credentials (optional - nur wenn vorhanden)
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./ocr-pipeline-weinmannschanz-720c466e761d.json}:/app/credentials/gcp-key.json:ro
+      # .env Datei
+      - ./.env:/app/.env:ro
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (Next.js)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ocr-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  default:
+    name: ocr-pipeline-network
+    driver: bridge

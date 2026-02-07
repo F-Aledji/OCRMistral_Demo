@@ -14,6 +14,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from enum import Enum
 from decimal import Decimal
+from sqlalchemy import event, text
 import json
 
 
@@ -62,7 +63,7 @@ class ProcessingRun(SQLModel, table=True):
     
     # Zeitstempel
     started_at: datetime = Field(default_factory=datetime.now, index=True)
-    finished_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = Field(default=None, index=True)
     duration_ms: Optional[int] = None
     
     # Ergebnis
@@ -80,8 +81,26 @@ class ProcessingRun(SQLModel, table=True):
     raw_json: Optional[str] = None  # JSON als String gespeichert
     reasoning_text: Optional[str] = None
     
+    # =========================================================================
+    # REPAIR TRACKING (für KPI-Dashboard)
+    # =========================================================================
+    # Schema Repair (bisherige Judge-Logik bei Validierungsfehlern)
+    schema_repair_attempted: bool = Field(default=False, description="Wurde Schema-Reparatur versucht?")
+    schema_repair_success: bool = Field(default=False, description="War Schema-Reparatur erfolgreich?")
+    
+    # Business Repair (neue Logik bei schlechtem Score)
+    business_repair_attempted: bool = Field(default=False, description="Wurde Business-Reparatur versucht?")
+    business_repair_success: bool = Field(default=False, description="War Business-Reparatur erfolgreich?")
+    initial_score: Optional[int] = Field(default=None, description="Score VOR Business Repair")
+    final_score: Optional[int] = Field(default=None, description="Score NACH Business Repair")
+    score_improvement: Optional[int] = Field(default=None, description="Score-Verbesserung durch Business Repair")
+    
+    
     # Relationship: Ein Run hat 0-n extrahierte Dokumente
-    documents: List["ExtractedDocument"] = Relationship(back_populates="run")
+    documents: List["ExtractedDocument"] = Relationship(
+        back_populates="run",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 # =============================================================================
@@ -112,8 +131,8 @@ class ExtractedDocument(SQLModel, table=True):
     position_count: Optional[int] = None
     
     # Score
-    # Score
     score: int = Field(default=100, index=True)
+    initial_score: Optional[int] = Field(default=None, description="Score vor Business Repair (falls durchgeführt)")
     needs_review: bool = Field(default=False, index=True)
     has_template: bool = Field(default=False, description="True wenn für diesen Lieferanten ein Template existiert")
     
@@ -124,12 +143,29 @@ class ExtractedDocument(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     
     # Optional: Frontend-Verknüpfung (wenn eskaliert)
-    frontend_document_id: Optional[UUID] = None
+    frontend_document_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="documents.id",
+        index=True,
+        description="Verknüpfung zum Frontend-Dokument bei Eskalation"
+    )
+    
+    # Timestamps
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now}
+    )
     
     # Relationships
     run: ProcessingRun = Relationship(back_populates="documents")
-    penalties: List["ScorePenalty"] = Relationship(back_populates="document")
-    signals: List["ScoreSignal"] = Relationship(back_populates="document")
+    penalties: List["ScorePenalty"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    signals: List["ScoreSignal"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 # =============================================================================
@@ -148,7 +184,7 @@ class ScorePenalty(SQLModel, table=True):
     document_id: UUID = Field(foreign_key="extracted_document.id", index=True)
     
     points: int  # Abgezogene Punkte (positiv, z.B. 20)
-    reason: str  # "BA-Nummer fehlt"
+    reason: str = Field(index=True)  # "BA-Nummer fehlt"
     category: PenaltyCategory = Field(default=PenaltyCategory.OTHER, index=True)
     
     # Relationship

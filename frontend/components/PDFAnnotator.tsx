@@ -110,7 +110,7 @@ export default function PDFAnnotator({
     // Ref für aktive Render-Task (verhindert Race-Condition bei schnellem Zoom)
     // Wenn ein neuer Render startet während ein alter noch läuft, 
     // wird der alte abgebrochen
-    const renderTaskRef = useRef<any>(null);
+    const renderTaskRef = useRef<{ cancel: () => void; promise: Promise<void> } | null>(null);
 
     // -----------------------------------------------------------------------------
     // PDF LADEN UND RENDERN
@@ -123,7 +123,7 @@ export default function PDFAnnotator({
         if (renderTaskRef.current) {
             try {
                 renderTaskRef.current.cancel();
-            } catch (e) {
+            } catch {
                 // Ignorieren falls bereits beendet
             }
             renderTaskRef.current = null;
@@ -178,29 +178,31 @@ export default function PDFAnnotator({
             setPdfScale(finalScale);
 
             // PDF rendern (Task speichern für möglichen Abbruch)
+            // @ts-expect-error - PDF.js types are incomplete for RenderParameters
             const renderTask = page.render({
                 canvasContext: context,
                 viewport: viewport,
-            } as any);
+            });
             renderTaskRef.current = renderTask;
 
             await renderTask.promise;
             renderTaskRef.current = null;
 
             setLoading(false);
-        } catch (e: any) {
+        } catch (error: unknown) {
             // RenderingCancelledException ignorieren (normaler Ablauf bei Abbruch)
-            if (e?.name === "RenderingCancelledException") {
+            const err = error as { name?: string; message?: string };
+            if (err?.name === "RenderingCancelledException") {
                 return;
             }
             // Canvas-Konflikt bei StrictMode ignorieren (PDF rendert trotzdem)
-            if (e?.message?.includes("multiple render()")) {
-                console.warn("PDF Render Race (ignoriert):", e.message);
+            if (err?.message?.includes("multiple render()")) {
+                console.warn("PDF Render Race (ignoriert):", err.message);
                 setLoading(false);
                 return;
             }
-            console.error("PDF Render Error:", e);
-            setError(e instanceof Error ? e.message : "PDF konnte nicht geladen werden");
+            console.error("PDF Render Error:", error);
+            setError(error instanceof Error ? error.message : "PDF konnte nicht geladen werden");
             setLoading(false);
         }
     }, [pdfUrl, currentPage, onLoadSuccess, zoom]);

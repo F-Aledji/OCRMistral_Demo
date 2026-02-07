@@ -81,8 +81,19 @@ def save_processing_run(
             # Metriken
             file_size_bytes=result_data.get("file_size_bytes"),
             page_count=result_data.get("page_count"),
-            is_scanned=result_data.get("is_scanned", False)
+            is_scanned=result_data.get("is_scanned", False),
+            # Repair Tracking (neu!)
+            schema_repair_attempted=result_data.get("schema_repair_attempted", False),
+            business_repair_attempted=result_data.get("business_repair_attempted", False),
+            business_repair_success=result_data.get("business_repair_success", False),
+            initial_score=result_data.get("initial_score"),
+            final_score=result_data.get("avg_score")
         )
+        
+        # Score-Verbesserung berechnen (falls Business Repair durchgeführt wurde)
+        if run.business_repair_attempted and run.initial_score is not None and run.final_score is not None:
+            run.score_improvement = run.final_score - run.initial_score
+            run.schema_repair_success = result_data.get("judge_repaired", False) and not run.business_repair_attempted
         
         # Final Status basierend auf Erfolg
         if not result_data.get("success"):
@@ -121,6 +132,7 @@ def save_processing_run(
                 net_total=_safe_float(_safe_get(sc, ["documentNetTotal"])),
                 position_count=len(sc.get("details", [])) if sc.get("details") else 0,
                 score=score,
+                initial_score=result_data.get("initial_score") if result_data.get("business_repair_attempted") else None,
                 needs_review=(score < escalation_threshold),
                 has_template=score_card.get("template_match", False)
             )

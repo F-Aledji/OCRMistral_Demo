@@ -35,6 +35,8 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",      # Next.js Dev Server
     "http://127.0.0.1:3000",
+    "http://localhost:3001",      # Next.js alternative port
+    "http://localhost:3002",      # Next.js alternative port
     "http://localhost:5173",      # Vite Dev Server (falls verwendet)
 ]
 

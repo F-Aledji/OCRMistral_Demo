@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from sqlmodel import Field, SQLModel, Relationship, Column
-from sqlalchemy import JSON
+from sqlalchemy import JSON, event, text
 
 
 # -----------------------------------------------------------------------------
@@ -63,14 +63,15 @@ class Document(SQLModel, table=True):
             claimed_by_user_id="alice"  # Alice bearbeitet gerade
         )
     """
+    __tablename__ = "documents"
     # Primärschlüssel: UUID statt Auto-Increment (besser für verteilte Systeme)
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     
     # Status in der Warteschlange
-    status: DocumentStatus = Field(default=DocumentStatus.NEW)
+    status: DocumentStatus = Field(default=DocumentStatus.NEW, index=True)
     
     # Extrahierte Daten (für Übersicht in Queue-Liste)
-    ba_number: Optional[str] = Field(default=None, description="Extrahierte BA-Nummer")
+    ba_number: Optional[str] = Field(default=None, index=True, description="Extrahierte BA-Nummer")
     vendor_name: Optional[str] = Field(default=None, description="Extrahierter Lieferantenname")
     total_value: Optional[float] = Field(default=None, description="Extrahierte Gesamtsumme")
     score: Optional[int] = Field(default=None, description="Score aus der Validierung (0-100)")
@@ -79,20 +80,29 @@ class Document(SQLModel, table=True):
     filename: Optional[str] = Field(default=None, description="Original-Dateiname")
     
     # Claiming: Wer bearbeitet dieses Dokument gerade?
-    claimed_by_user_id: Optional[str] = Field(default=None, description="User-ID des Bearbeiters")
-    claim_expires_at: Optional[datetime] = Field(default=None, description="Wann läuft die Sperre ab?")
+    claimed_by_user_id: Optional[str] = Field(default=None, index=True, description="User-ID des Bearbeiters")
+    claim_expires_at: Optional[datetime] = Field(default=None, index=True, description="Wann läuft die Sperre ab?")
     
     # Optimistic Locking: Verhindert, dass zwei User gleichzeitig speichern
     # Jedes Speichern erhöht die Version. Client muss aktuelle Version mitsenden.
     version: int = Field(default=1)
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now, "server_default": text("CURRENT_TIMESTAMP")}
+    )
     
     # Beziehungen zu anderen Tabellen (werden automatisch geladen)
-    files: List["DocumentFile"] = Relationship(back_populates="document")
-    annotations: List["Annotation"] = Relationship(back_populates="document")
+    files: List["DocumentFile"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    annotations: List["Annotation"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -115,9 +125,9 @@ class DocumentFile(SQLModel, table=True):
     __tablename__ = "document_files"
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    document_id: uuid.UUID = Field(foreign_key="document.id")
+    document_id: uuid.UUID = Field(foreign_key="documents.id", index=True)
     
-    kind: FileKind = Field(description="Art der Datei (Original, Annotated, XML)")
+    kind: FileKind = Field(index=True, description="Art der Datei (Original, Annotated, XML)")
     path: str = Field(description="Pfad zur Datei auf der Festplatte")
     
     created_at: datetime = Field(default_factory=datetime.now)
@@ -152,11 +162,11 @@ class Annotation(SQLModel, table=True):
     __tablename__ = "annotations"
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    document_id: uuid.UUID = Field(foreign_key="document.id")
+    document_id: uuid.UUID = Field(foreign_key="documents.id", index=True)
     
     # Wer hat diese Annotation erstellt?
-    author_user_id: Optional[str] = Field(default=None)
-    source: str = Field(default="model", description="'model' = KI, 'user' = Mensch")
+    author_user_id: Optional[str] = Field(default=None, index=True)
+    source: str = Field(default="model", index=True, description="'model' = KI, 'user' = Mensch")
     
     # Die eigentlichen Daten als JSON
     # sa_column=Column(JSON) sagt SQLModel, dass es JSON-Daten speichern soll
@@ -164,7 +174,10 @@ class Annotation(SQLModel, table=True):
     
     # Version: Passt zur Document-Version für Konsistenz
     version: int = Field(default=1)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now}
+    )
     
     # Rück-Beziehung
     document: Document = Relationship(back_populates="annotations")
@@ -182,7 +195,7 @@ class ValidBANumber(SQLModel, table=True):
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     ba_number: str = Field(index=True, unique=True)
-    supplier_name: str
+    supplier_name: str = Field(index=True)
     supplier_id: str = Field(index=True) # Verweis auf ERP-ID
 
 # -----------------------------------------------------------------------------
