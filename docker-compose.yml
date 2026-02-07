@@ -25,7 +25,7 @@ services:
       - ./backend/data:/app/backend/data
       - ./backend/logs:/app/backend/logs
       # GCP Credentials (optional - nur wenn vorhanden)
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-./ocr-pipeline-weinmannschanz-720c466e761d.json}:/app/credentials/gcp-key.json:ro
+      - ./backend/config/ocr-pipeline-weinmannschanz-720c466e761d.json:/app/credentials/gcp-key.json:ro
       # .env Datei
       - ./.env:/app/.env:ro
     healthcheck:

@@ -44,8 +44,7 @@ FROM dependencies AS production
 # Backend-Verzeichnis kopieren (enthält jetzt alles)
 COPY backend/ ./backend/
 
-# Schema-Datei aus Root kopieren (falls noch extern referenziert)
-COPY schema/ ./schema/
+
 
 # Datenverzeichnis erstellen
 RUN mkdir -p /app/backend/data /app/backend/logs
