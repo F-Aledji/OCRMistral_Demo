@@ -74,7 +74,8 @@ class PipelineService:
             "data": result.validated_json,
             "score": result.avg_score,
             "score_cards": result.score_cards,
-            "annotations": annotations
+            "annotations": annotations,
+            "xml": result.xml  # Das generierte XML mitgeben
         }
     
     def _extract_annotations(self, data: Dict[str, Any], pdf_bytes: bytes) -> Dict[str, Any]:

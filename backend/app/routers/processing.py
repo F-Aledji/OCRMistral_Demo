@@ -14,6 +14,7 @@ from ..db import get_session
 from ..db_models import Document, Annotation, DocumentStatus
 from ..services import storage
 from ..services.pipeline import get_pipeline_service
+from ..config import config as cfg
 
 router = APIRouter(tags=["processing"])
 
@@ -59,7 +60,7 @@ async def process_document(doc_id: UUID, session: Session = Depends(get_session)
         
         # Pipeline ausführen
         pipeline = get_pipeline_service()
-        result = pipeline.process_pdf(pdf_bytes)
+        result = pipeline.process_pdf(pdf_bytes, filename=doc.filename or "document.pdf")
         
         if not result.get("success"):
             # Fehler bei OCR
@@ -106,6 +107,28 @@ async def process_document(doc_id: UUID, session: Session = Depends(get_session)
                 version=doc.version
             )
             session.add(annotation)
+        
+        # XML physisch speichern (NICHT in der Datenbank)
+        if result.get("xml"):
+            xml_filename = f"{doc_id}.xml"
+            if doc.filename:
+                xml_filename = f"{os.path.splitext(doc.filename)[0]}.xml"
+            
+            output_dir = cfg.FOLDERS.get("OUTPUT", "02_Output")
+            os.makedirs(output_dir, exist_ok=True)
+            xml_path = os.path.join(output_dir, xml_filename)
+            
+            with open(xml_path, "w", encoding="utf-8") as f:
+                f.write(result["xml"])
+            
+            # Pfad in DocumentFile registrieren (XML_EXPORT)
+            from ..db_models import DocumentFile, FileKind
+            xml_file = DocumentFile(
+                document_id=doc.id,
+                kind=FileKind.XML_EXPORT,
+                path=xml_path
+            )
+            session.add(xml_file)
         
         session.commit()
         

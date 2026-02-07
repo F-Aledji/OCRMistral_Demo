@@ -5,8 +5,17 @@
 // Das Frontend ruft diese Funktionen auf, um Daten zu holen/speichern.
 // =============================================================================
 
-// Backend URL (bei Entwicklung auf localhost:8000)
-const API_BASE = "http://localhost:8000/api/v1";
+// Backend URL automatisch basierend auf der aktuellen Adresse im Browser ermitteln
+// Falls lokal: localhost, falls im Netzwerk: die IP des Servers
+const getApiBase = () => {
+    if (typeof window !== "undefined") {
+        const hostname = window.location.hostname;
+        return `http://${hostname}:8000/api/v1`;
+    }
+    return "http://localhost:8000/api/v1";
+};
+
+const API_BASE = getApiBase();
 
 
 // -----------------------------------------------------------------------------
